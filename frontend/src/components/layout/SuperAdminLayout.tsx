@@ -53,10 +53,10 @@ export function SuperAdminLayout() {
     .toUpperCase()
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-white">
       {/* Identity rail — always on screen, so the panel is recognisable even
           from a glance at a browser thumbnail. */}
-      <div className="fixed inset-x-0 top-0 z-50 h-1 bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500" />
+      <div className="fixed inset-x-0 top-0 z-50 h-1 bg-violet-600" />
 
       <header className="sticky top-0 z-40 mt-1 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
@@ -83,7 +83,7 @@ export function SuperAdminLayout() {
           <div className="ml-auto flex items-center gap-2">
             <Link
               to="/super/customers/new"
-              className="hidden items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-800 sm:inline-flex"
+              className="hidden items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90 sm:inline-flex"
             >
               <Plus className="h-4 w-4" /> New customer
             </Link>

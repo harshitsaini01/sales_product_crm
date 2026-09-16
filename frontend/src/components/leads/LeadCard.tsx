@@ -130,12 +130,12 @@ export function LeadCard({
 
   return (
     <div className={`
-      relative rounded-2xl border-l-4 border overflow-hidden
-      transition-all duration-200 hover:shadow-lg hover:-translate-y-[1px]
+      relative rounded-xl border-l-[3px] border overflow-hidden
+      transition-colors
       ${statusCfg.border}
       ${isSelected
-        ? 'border-primary/40 bg-primary/[0.02] shadow-md shadow-primary/10'
-        : 'border-border bg-card shadow-sm'
+        ? 'border-primary/40 bg-primary/[0.02]'
+        : 'border-border bg-card'
       }
     `}>
 

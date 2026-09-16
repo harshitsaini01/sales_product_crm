@@ -58,3 +58,20 @@ settingsRoutes.patch('/page-limit', adminOnly, async (c) => {
   return c.json({ message: 'Page limit updated', limit })
 })
 
+const LETTERHEAD_KEYS = ['company_name', 'company_email', 'company_phone', 'company_gstin', 'company_address', 'company_state'] as const
+
+settingsRoutes.patch('/', adminOnly, async (c) => {
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>
+  for (const key of LETTERHEAD_KEYS) {
+    if (typeof body[key] !== 'string') continue
+    const value = body[key].trim()
+    await prisma.systemSetting.upsert({
+      where: { key },
+      update: { value },
+      create: { key, value },
+    })
+  }
+  const settings = await prisma.systemSetting.findMany({ where: { key: { in: [...LETTERHEAD_KEYS] } } })
+  return c.json(Object.fromEntries(settings.map((s) => [s.key, s.value])))
+})
+

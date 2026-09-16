@@ -259,8 +259,8 @@ export const inputClass =
 // Near-black primary, not the CRM's blue — part of keeping the two panels
 // visually distinct now that the background no longer does that job.
 export const btnPrimary =
-  'inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white shadow-sm ' +
-  'transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900/20 ' +
+  'inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-white shadow-sm ' +
+  'transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/20 ' +
   'disabled:cursor-not-allowed disabled:opacity-40'
 
 export const btnGhost =

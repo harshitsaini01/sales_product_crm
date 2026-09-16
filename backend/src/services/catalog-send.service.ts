@@ -1,8 +1,8 @@
 import { prisma } from '../lib/prisma'
 import { emailService } from './email.service'
-import { recordStatusChange } from './leads/status-history.service'
-import { resolveStatusCascade } from './leads/status-cascade.service'
+import { markLeadBySlug } from './leads/lifecycle.service'
 import { currentTenant } from '../lib/tenant-context'
+import { resolveProductTokens } from './crm/product-email.service'
 
 const n = (v: unknown) => (v == null ? 0 : Number(v))
 const esc = (v: unknown) =>
@@ -63,45 +63,39 @@ function waPhone(mobile: string | null | undefined): string | null {
 }
 
 async function markCatalogSent(leadId: bigint, userId: bigint): Promise<void> {
-  const lead = await prisma.lead.findUnique({
-    where: { id: leadId },
-    select: { leadStatus: true, leadSubStatus: true, leadStatusId: true, departmentId: true },
-  })
-  if (!lead) return
+  await markLeadBySlug(leadId, 'catalog-sent', userId, 'Catalog sent')
+}
 
-  const status = await prisma.leadStatus.findFirst({
-    where: {
-      slug: 'catalog-sent',
-      status: 1,
-      ...(lead.departmentId ? { departmentId: lead.departmentId } : {}),
-    },
-    select: { id: true, title: true, departmentId: true },
-  })
-  if (!status || lead.leadStatusId === status.id) return
+function personalizeMail(
+  html: string,
+  lead: { name: string | null; email: string | null; mobile?: string | null },
+  counsellor?: { name?: string | null; email?: string | null } | null,
+): string {
+  const name = (lead.name || '').trim() || 'there'
+  const firstName = name.split(/\s+/)[0]
+  const counsellorName = (counsellor?.name || '').trim()
+  const counsellorFirst = counsellorName ? counsellorName.split(/\s+/)[0] : ''
+  return html
+    .replace(/\{\{\s*name\s*\}\}/gi, name)
+    .replace(/\{\{\s*firstName\s*\}\}/gi, firstName)
+    .replace(/\{\{\s*email\s*\}\}/gi, lead.email || '')
+    .replace(/\{\{\s*mobile\s*\}\}/gi, lead.mobile || '')
+    .replace(/\{\{\s*counsellorName\s*\}\}/gi, counsellorName)
+    .replace(/\{\{\s*counsellorFirstName\s*\}\}/gi, counsellorFirst)
+    .replace(/\{\{\s*counsellorEmail\s*\}\}/gi, counsellor?.email || '')
+}
 
-  const cascade = await resolveStatusCascade({
-    leadStatusId: status.id,
-    currentDepartmentId: lead.departmentId,
-  })
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: {
-      leadStatusId: status.id,
-      leadStatus: cascade.leadStatus ?? status.title,
-      ...(cascade.departmentId !== undefined ? { departmentId: cascade.departmentId } : {}),
-      ...(cascade.statusLeadTypeId !== undefined ? { statusLeadTypeId: cascade.statusLeadTypeId } : {}),
-    },
-  })
-  await recordStatusChange({
-    leadId,
-    changedById: userId,
-    fromStatus: lead.leadStatus,
-    toStatus: cascade.leadStatus ?? status.title,
-    fromSubStatus: lead.leadSubStatus,
-    toSubStatus: lead.leadSubStatus,
-    reason: 'Catalog sent',
-    source: 'api',
-  })
+function jsonIds(raw: unknown): bigint[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((v) => {
+      try {
+        return BigInt(v as number | string)
+      } catch {
+        return 0n
+      }
+    })
+    .filter((id) => id > 0n)
 }
 
 export async function sendLeadCatalog(opts: {
@@ -110,6 +104,7 @@ export async function sendLeadCatalog(opts: {
   productIds: bigint[]
   channel: 'email' | 'whatsapp'
   note?: string | null
+  templateId?: bigint | null
 }): Promise<{
   send: unknown
   channel: 'email' | 'whatsapp'
@@ -118,33 +113,58 @@ export async function sendLeadCatalog(opts: {
   text?: string
 }> {
   const ids = [...new Set(opts.productIds)]
-  if (!ids.length) throw new Error('Pick at least one product')
+  const useTemplate = opts.channel === 'email' && Boolean(opts.templateId)
+  if (!ids.length && !useTemplate) throw new Error('Pick at least one product or an email template')
 
-  const [lead, products] = await Promise.all([
+  const [lead, products, template, counsellor] = await Promise.all([
     prisma.lead.findUnique({
       where: { id: opts.leadId },
       select: { id: true, name: true, email: true, mobile: true },
     }),
-    prisma.product.findMany({
-      where: { id: { in: ids }, active: true },
-      select: { id: true, name: true, description: true, unitPrice: true, currency: true, imageUrl: true },
+    ids.length
+      ? prisma.product.findMany({
+          where: { id: { in: ids }, active: true },
+          select: { id: true, name: true, description: true, unitPrice: true, currency: true, imageUrl: true },
+        })
+      : Promise.resolve([] as Array<{
+          id: bigint
+          name: string
+          description: string | null
+          unitPrice: unknown
+          currency: string | null
+          imageUrl: string | null
+        }>),
+    useTemplate
+      ? prisma.mailTemplate.findFirst({
+          where: {
+            id: opts.templateId!,
+            OR: [{ userId: opts.userId }, { status: 1 }],
+          },
+        })
+      : Promise.resolve(null),
+    prisma.user.findUnique({
+      where: { id: opts.userId },
+      select: { name: true, email: true },
     }),
   ])
   if (!lead) throw new Error('Lead not found')
-  if (!products.length) throw new Error('No active products matched')
+  if (ids.length && !products.length) throw new Error('No active products matched')
+  if (useTemplate && !template) throw new Error('Email template not found')
   if (opts.channel === 'email' && !lead.email) throw new Error('This lead has no email')
   if (opts.channel === 'whatsapp' && !waPhone(lead.mobile)) throw new Error('This lead has no mobile number')
+  if (opts.channel === 'whatsapp' && !products.length) throw new Error('Pick at least one product')
 
   const ordered = ids
     .map((id) => products.find((p) => p.id === id))
     .filter((p): p is NonNullable<typeof p> => Boolean(p))
 
+  const note = opts.note?.trim()
   const send = await prisma.leadCatalogSend.create({
     data: {
       leadId: lead.id,
       sentById: opts.userId,
       channel: opts.channel,
-      note: opts.note?.trim() || null,
+      note: note || (template ? `Template: ${template.title}` : null),
       items: {
         create: ordered.map((p) => ({
           productId: p.id,
@@ -161,10 +181,9 @@ export async function sendLeadCatalog(opts: {
     },
   })
 
-  await markCatalogSent(lead.id, opts.userId)
+  if (ordered.length) await markCatalogSent(lead.id, opts.userId)
 
   const greeting = (lead.name || '').trim() || 'there'
-  const note = opts.note?.trim()
   const company = currentTenant()?.companyName || 'Sales CRM'
 
   if (opts.channel === 'whatsapp') {
@@ -184,18 +203,42 @@ export async function sendLeadCatalog(opts: {
     }
   }
 
-  const cards = ordered.map((p) => productCardHtml(p)).join('')
-  const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#0f172a">
+  let subject = note ? note.slice(0, 80) : `Products from ${company}`
+  let html = ''
+
+  if (template) {
+    subject = personalizeMail(template.subject, lead, counsellor) || subject
+    let body = personalizeMail(template.body, lead, counsellor)
+    const extraIds = [...ordered.map((p) => p.id), ...jsonIds(template.productIds)]
+    const hasGrid = /\{\{\s*product_grid\s*\}\}/.test(body)
+    const hasProductToken = /\{\{\s*product:/.test(body)
+    if (ordered.length && !hasGrid && !hasProductToken) {
+      body += ordered.map((p) => `{{product:${p.id}}}`).join('')
+    } else if (ordered.length && hasProductToken && !hasGrid) {
+      for (const p of ordered) {
+        if (!new RegExp(`\\{\\{\\s*product:${p.id}\\s*\\}\\}`).test(body)) {
+          body += `{{product:${p.id}}}`
+        }
+      }
+    }
+    body = await resolveProductTokens(body, extraIds)
+    html = note
+      ? `<p>${esc(note)}</p>${body}`
+      : body
+  } else {
+    const cards = ordered.map((p) => productCardHtml(p)).join('')
+    html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#0f172a">
   <p>Hi ${esc(greeting)},</p>
   <p>${esc(note || 'Here are the products you asked about.')}</p>
   ${cards}
   <p style="font-size:13px;color:#64748b;margin-top:24px">${esc(company)}</p>
 </div>`
+  }
 
   try {
     await emailService.send({
       to: lead.email!,
-      subject: note ? note.slice(0, 80) : `Products from ${company}`,
+      subject,
       html,
     })
     return { send, channel: 'email', email: { status: 'sent' } }

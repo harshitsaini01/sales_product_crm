@@ -10,15 +10,16 @@ import { toast } from 'sonner'
 import {
   Phone, Mail, MapPin, MessageSquare, CalendarDays, Loader2,
   StickyNote, Bell, FileText, Send, Info, Trash2, PhoneCall,
-  Activity, ArrowRight, MessagesSquare,
+  Activity, ArrowRight, MessagesSquare, Search,
 } from 'lucide-react'
-import type { Lead, LeadFollowup, LeadNote, Reminder } from '@/types'
+import type { Lead, LeadFollowup, LeadNote, Reminder, MailTemplate } from '@/types'
 import { StatusBadge } from '@/components/leads/StatusBadge'
 import { QuickCallButton } from '@/components/leads/QuickCallButton'
 import { WhatsappSendModal } from '@/components/leads/WhatsappSendModal'
 import { PushToPhoneButton } from '@/components/leads/PushToPhoneButton'
 import { LeadOverview } from '@/components/leads/LeadOverview'
 import { SendCatalogPanel } from '@/components/leads/SendCatalogPanel'
+import { LeadDealsPanel } from '@/components/leads/LeadDealsPanel'
 import { LeadDocumentsTab } from '@/components/leads/LeadDocumentsTab'
 import { RecordingPlayer } from '@/components/calls/RecordingPlayer'
 import { useLeadFields } from '@/hooks/useLeadFields'
@@ -148,6 +149,10 @@ export function LeadDetail() {
         hasEmail={Boolean(lead.email)}
         hasMobile={Boolean(lead.mobile)}
       />
+
+      {hasFeature('deals') && (
+        <LeadDealsPanel leadId={lead.id} leadName={lead.name} />
+      )}
 
       {/* Tabs */}
       <div className="bg-card border rounded-lg overflow-hidden">
@@ -1016,11 +1021,27 @@ function EmailTab({ lead }: { lead: Lead }) {
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
+  const [templateId, setTemplateId] = useState('')
 
   const { data: mails = [], isLoading: mailsLoading } = useQuery<MailHistoryRow[]>({
     queryKey: ['lead-mails', lead.id],
     queryFn: () => leadsApi.mails(lead.id),
   })
+
+  const { data: templates = [] } = useQuery<MailTemplate[]>({
+    queryKey: ['comm', 'templates'],
+    queryFn: communicationApi.templates,
+  })
+
+  const applyTemplate = (id: string) => {
+    setTemplateId(id)
+    if (!id) return
+    const tpl = templates.find((t) => String(t.id) === id)
+    if (tpl) {
+      setSubject(tpl.subject || '')
+      setBody(tpl.body || '')
+    }
+  }
 
   const send = async () => {
     if (!lead.email) return toast.error('Lead has no email address')
@@ -1031,6 +1052,7 @@ function EmailTab({ lead }: { lead: Lead }) {
       toast.success('Email sent')
       setSubject('')
       setBody('')
+      setTemplateId('')
       qc.invalidateQueries({ queryKey: ['lead-mails', lead.id] })
       qc.invalidateQueries({ queryKey: ['lead-timeline', lead.id] })
     } catch {
@@ -1054,6 +1076,26 @@ function EmailTab({ lead }: { lead: Lead }) {
           readOnly
           className="w-full mt-1 px-3 py-1.5 text-sm border rounded-md bg-muted/30"
         />
+      </div>
+      <div>
+        <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+          <FileText className="h-3.5 w-3.5" /> Template
+        </label>
+        <select
+          value={templateId}
+          onChange={(e) => applyTemplate(e.target.value)}
+          className="w-full mt-1 px-3 py-1.5 text-sm border rounded-md bg-background"
+        >
+          <option value="">— Choose a saved template —</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.title}
+            </option>
+          ))}
+        </select>
+        {!templates.length && (
+          <p className="mt-1 text-xs text-muted-foreground">Save templates under Mail → Templates to pick them here.</p>
+        )}
       </div>
       <div>
         <label className="text-xs font-medium text-muted-foreground">Subject</label>
@@ -1292,29 +1334,50 @@ function formatDuration(sec: number): string {
 }
 
 function LeadProductPicker({ onPick }: { onPick: (token: string) => void }) {
+  const [q, setQ] = useState('')
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ['products', 'mail-picker'],
     queryFn: () => productsApi.list(),
     staleTime: 60_000,
   })
+  const filtered = q.trim()
+    ? products.filter((p) =>
+        `${p.name} ${p.sku || ''} ${p.description || ''} ${p.category || ''}`.toLowerCase().includes(q.trim().toLowerCase()),
+      )
+    : products
   if (!products.length) {
     return <p className="mt-1 text-xs text-muted-foreground">Add products under Products, then click one to drop it into this mail.</p>
   }
   return (
-    <div className="mt-1 mb-2 flex flex-wrap gap-1.5">
-      {products.map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          onClick={() => onPick(`{{product:${p.sku || p.id}}}`)}
-          className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs hover:bg-accent"
-          title={p.description || p.name}
-        >
-          {p.imageUrl && <img src={p.imageUrl} alt="" className="h-6 w-6 rounded object-cover" />}
-          <span>{p.name}</span>
-          <span className="text-muted-foreground">{formatMoney(p.unitPrice, p.currency)}</span>
-        </button>
-      ))}
+    <div className="mt-1 mb-2 space-y-1.5">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search products…"
+          className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-xs"
+        />
+      </div>
+      {filtered.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No products match “{q}”.</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+          {filtered.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onPick(`{{product:${p.sku || p.id}}}`)}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs hover:bg-accent"
+              title={p.description || p.name}
+            >
+              {p.imageUrl && <img src={p.imageUrl} alt="" className="h-6 w-6 rounded object-cover" />}
+              <span>{p.name}</span>
+              <span className="text-muted-foreground">{formatMoney(p.unitPrice, p.currency)}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

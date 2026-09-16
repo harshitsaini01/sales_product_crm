@@ -54,9 +54,9 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen bg-white overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         <Header onToggleSidebar={() => setSidebarOpen((v) => !v)} />
         {/* Super admin acting as a customer. Deliberately red and louder than
             the ordinary impersonation banner: this session is inside somebody
@@ -88,7 +88,7 @@ export function AppLayout() {
             </button>
           </div>
         )}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 custom-scrollbar">
           <Outlet />
         </main>
       </div>

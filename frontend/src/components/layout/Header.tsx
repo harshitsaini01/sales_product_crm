@@ -67,10 +67,13 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
   const followupCount = todayFollowups?.total ?? 0
 
+  const iconBtn =
+    'relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors'
+
   return (
-    <header className="h-16 border-b bg-card flex items-center justify-between px-4 md:px-6 shrink-0 gap-3">
+    <header className="h-14 border-b bg-white flex items-center justify-between px-4 md:px-6 shrink-0 gap-3">
       {/* Left: Sidebar toggle + welcome */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         <button
           onClick={onToggleSidebar}
           className="p-2 rounded-lg hover:bg-accent transition-colors lg:hidden"
@@ -78,7 +81,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <div className="text-sm text-muted-foreground hidden sm:block">
+        <div className="text-sm text-muted-foreground hidden md:block truncate">
           Welcome back, <span className="font-medium text-foreground">{user?.name}</span>
         </div>
         {/* Only for customers with the accounts module — see GlobalSearch. */}
@@ -86,33 +89,28 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
 
-        {/* Highlighted Webmail Accounts button for Admin */}
         {user?.role === 'admin' && (
           <Link
             to="/app/webmail-accounts"
-            className="group relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 hover:from-amber-600 hover:via-orange-600 hover:to-rose-700 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 ring-2 ring-amber-400/40 hover:ring-amber-400/70 border border-white/20 transition-all duration-200 hover:scale-[1.03] active:scale-[0.98]"
+            className="hidden sm:inline-flex items-center gap-2 h-9 px-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Webmail Accounts"
           >
-            <div className="relative flex items-center justify-center">
-              <Mail className="h-4 w-4 shrink-0 text-amber-100 group-hover:scale-110 transition-transform" />
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-200 animate-ping" />
-            </div>
-            <span className="hidden sm:inline font-bold tracking-wide text-white drop-shadow-sm">Webmail Accounts</span>
-
+            <Mail className="h-4 w-4" />
+            Webmail
           </Link>
         )}
 
         {/* Today's Follow-ups — navigates to /app/followups */}
         <Link
           to="/app/followups"
-          className="p-2 rounded-lg hover:bg-accent transition-colors relative"
+          className={iconBtn}
           title="Today's follow-ups"
         >
-          <Activity className="h-5 w-5 text-orange-500" />
+          <Activity className="h-4 w-4" />
           {followupCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-5 w-5 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-card">
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground ring-2 ring-card">
               {followupCount > 99 ? '99+' : followupCount}
             </span>
           )}
@@ -121,12 +119,12 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         {/* Chat — navigates to /app/chat */}
         <Link
           to="/app/chat"
-          className="p-2 rounded-lg hover:bg-accent transition-colors relative"
+          className={iconBtn}
           title="Team chat"
         >
-          <MessageCircle className="h-5 w-5" />
+          <MessageCircle className="h-4 w-4" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-5 w-5 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-card">
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground ring-2 ring-card">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
@@ -135,19 +133,19 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         {/* Notifications — navigates to /app/notifications */}
         <Link
           to="/app/notifications"
-          className="p-2 rounded-lg hover:bg-accent transition-colors relative"
+          className={iconBtn}
           title="Notifications"
         >
-          <Bell className="h-5 w-5" />
+          <Bell className="h-4 w-4" />
           {notifCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-5 w-5 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-card">
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground ring-2 ring-card">
               {notifCount > 99 ? '99+' : notifCount}
             </span>
           )}
         </Link>
 
         {/* Role badge (desktop only) */}
-        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-sm">
+        <div className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-lg bg-muted text-xs text-muted-foreground">
           <Shield className="h-3.5 w-3.5" />
           <span className="capitalize font-medium">{user?.role}</span>
         </div>
@@ -156,9 +154,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         <div className="relative" ref={userMenuRef}>
           <button
             onClick={() => setShowUserMenu((v) => !v)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-accent transition-colors"
+            className="flex items-center gap-2 h-9 pl-1 pr-2 rounded-lg hover:bg-accent transition-colors"
           >
-            <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
+            <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold">
               {user?.name?.charAt(0)?.toUpperCase() || 'U'}
             </div>
             <span className="text-sm font-medium hidden md:block max-w-[120px] truncate">{user?.name}</span>
@@ -166,9 +164,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           </button>
 
           {showUserMenu && (
-            <div className="absolute right-0 top-full mt-2 w-56 bg-card border rounded-xl shadow-xl z-50 overflow-hidden">
-              <div className="px-4 py-3 border-b bg-muted/30">
-                <p className="text-sm font-bold truncate">{user?.name}</p>
+            <div className="absolute right-0 top-full mt-2 w-56 bg-card border rounded-xl shadow-lg z-50 overflow-hidden">
+              <div className="px-4 py-3 border-b bg-muted/40">
+                <p className="text-sm font-semibold truncate">{user?.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
               </div>
 
@@ -184,7 +182,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                   <Link
                     to="/app/webmail-accounts"
                     onClick={closeAll}
-                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-accent transition-colors"
                   >
                     <Mail className="h-4 w-4" /> Webmail Accounts
                   </Link>

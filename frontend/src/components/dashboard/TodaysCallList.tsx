@@ -37,7 +37,7 @@ export function TodaysCallList() {
   })
 
   return (
-    <div className="bg-card border rounded-xl shadow-sm">
+    <div className="surface">
       <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b">
         <div>
           <h2 className="text-lg font-bold flex items-center gap-2">

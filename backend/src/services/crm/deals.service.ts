@@ -62,12 +62,17 @@ export function summarize(lines: LineInput[]) {
  * batched lookup and hand the row in.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function serializeDeal(d: any, account?: { id: bigint | number; name: string } | null) {
+export function serializeDeal(
+  d: any,
+  account?: { id: bigint | number; name: string } | null,
+  lead?: { id: bigint | number; name: string } | null,
+) {
   const stageProbability = d.stage?.probability ?? 0
   const value = d.value == null ? null : Number(d.value)
   // A deal's own probability wins over its stage's — a rep who has set one
   // knows something the stage default does not.
   const probability = d.probability ?? stageProbability
+  const leadRow = lead ?? d.lead ?? null
 
   return {
     ...bigintFix(d),
@@ -83,5 +88,6 @@ export function serializeDeal(d: any, account?: { id: bigint | number; name: str
     probability,
     weightedValue: value == null ? null : Math.round((value * probability) / 100),
     account: account ? { id: Number(account.id), name: account.name } : null,
+    lead: leadRow ? { id: Number(leadRow.id), name: leadRow.name } : null,
   }
 }

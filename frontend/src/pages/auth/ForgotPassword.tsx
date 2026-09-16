@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate, Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { authApi } from '@/lib/api'
+import { AuthShell } from '@/components/layout/AuthShell'
 import { Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react'
 
 type Stage = 'email' | 'otp' | 'reset'
@@ -82,19 +83,20 @@ export function ForgotPassword() {
     }
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30">
-      <div className="w-full max-w-md">
-        <div className="bg-card rounded-lg border shadow-sm p-8">
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold">Forgot Password</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              {stage === 'email' && 'Enter your email to receive a verification code'}
-              {stage === 'otp' && `Enter the 6-digit OTP sent to ${email}`}
-              {stage === 'reset' && 'Choose your new password'}
-            </p>
-          </div>
+  const subtitle =
+    stage === 'email'
+      ? 'Enter your email to receive a verification code'
+      : stage === 'otp'
+        ? `Enter the 6-digit OTP sent to ${email}`
+        : 'Choose your new password'
 
+  const fieldClass =
+    'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary bg-background'
+  const btnClass =
+    'w-full py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors'
+
+  return (
+    <AuthShell title="Reset password" subtitle={subtitle}>
           {stage === 'email' && (
             <form onSubmit={onSendOtp} className="space-y-4">
               <div>
@@ -103,7 +105,7 @@ export function ForgotPassword() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+                  className={fieldClass}
                   placeholder="you@example.com"
                   autoComplete="email"
                   autoFocus
@@ -112,7 +114,7 @@ export function ForgotPassword() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                className={btnClass}
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                 Send OTP
@@ -130,7 +132,7 @@ export function ForgotPassword() {
                   maxLength={6}
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  className="w-full px-3 py-2 border rounded-md text-lg tracking-[0.5em] text-center focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+                  className="w-full px-3 py-2.5 border rounded-lg text-lg tracking-[0.5em] text-center focus:outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary bg-background"
                   placeholder="000000"
                   autoFocus
                 />
@@ -138,7 +140,7 @@ export function ForgotPassword() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                className={btnClass}
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                 Verify OTP
@@ -172,7 +174,7 @@ export function ForgotPassword() {
                     type={showPass ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-3 py-2 pr-10 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+                    className={`${fieldClass} pr-10`}
                     placeholder="Enter new password"
                     autoComplete="new-password"
                     autoFocus
@@ -193,7 +195,7 @@ export function ForgotPassword() {
                     type={showConfirm ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-3 py-2 pr-10 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+                    className={`${fieldClass} pr-10`}
                     placeholder="Re-enter new password"
                     autoComplete="new-password"
                   />
@@ -209,7 +211,7 @@ export function ForgotPassword() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                className={btnClass}
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                 Update Password
@@ -226,8 +228,6 @@ export function ForgotPassword() {
               Back to login
             </Link>
           </div>
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   )
 }

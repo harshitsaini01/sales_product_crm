@@ -101,7 +101,7 @@ export function GlobalSearch() {
           } else if (e.key === 'Enter' && rows[active]) go(rows[active])
         }}
         placeholder="Search accounts, deals, quotes, projects…  (Ctrl+K)"
-        className="w-72 rounded-lg border bg-background py-1.5 pl-9 pr-3 text-sm focus:w-96 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all lg:w-80"
+        className="w-72 rounded-lg border bg-muted/50 py-1.5 pl-9 pr-3 text-sm focus:w-96 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all lg:w-80"
       />
       {open && q.trim().length >= 2 && (
         <div className="absolute left-0 top-full z-50 mt-1 max-h-[70vh] w-[28rem] overflow-y-auto rounded-xl border bg-card shadow-xl">

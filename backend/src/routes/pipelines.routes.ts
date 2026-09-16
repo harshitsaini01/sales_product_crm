@@ -381,3 +381,24 @@ productsRoutes.delete('/:id', adminOnly, async (c) => {
   await prisma.product.update({ where: { id }, data: { active: false } })
   return c.json({ success: true, retired: true })
 })
+
+// Hard delete. Catalog sends and deal lines keep their snapshots; the live
+// product row is removed from the catalog.
+productsRoutes.delete('/:id/permanent', adminOnly, async (c) => {
+  const id = BigInt(c.req.param('id'))
+  const row = await prisma.product.findUnique({ where: { id }, select: { id: true } })
+  if (!row) return c.json({ error: 'Product not found' }, 404)
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.dealProduct.updateMany({ where: { productId: id }, data: { productId: null } })
+      await tx.productKitItem.deleteMany({ where: { OR: [{ kitId: id }, { componentId: id }] } })
+      await tx.product.delete({ where: { id } })
+    })
+  } catch (err) {
+    console.error('product permanent delete failed', err)
+    return c.json({ error: 'Could not delete this product. Hide it instead.' }, 409)
+  }
+
+  return c.json({ success: true, deleted: true })
+})

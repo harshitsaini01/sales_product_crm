@@ -1,9 +1,10 @@
 // Quote → order: dispatch stock, auto-raise invoice, stamp the account.
 
 import { prisma } from '../../lib/prisma'
-import { documentNumber, copyLines } from './documents.service'
+import { documentNumber, copyLines, recalc } from './documents.service'
 import * as stock from './stock.service'
 import * as activity from './activity.service'
+import { markLeadBySlug } from '../leads/lifecycle.service'
 
 const n = (v: unknown) => (v == null ? 0 : Number(v))
 
@@ -151,6 +152,120 @@ export async function placeOrderFromQuote(opts: {
       meta: { orderId: Number(order.id) },
     })
   }
+
+  return {
+    orderId: numbered.id,
+    orderNumber: numbered.orderNumber,
+    invoiceId,
+    invoiceNumber,
+  }
+}
+
+async function copyDealLines(dealId: bigint, orderId: bigint): Promise<number> {
+  const lines = await prisma.dealProduct.findMany({ where: { dealId }, orderBy: { sortOrder: 'asc' } })
+  if (!lines.length) throw new PlaceOrderError('Add products to the deal first.', 400)
+
+  const productIds = lines.map((l) => l.productId).filter(Boolean) as bigint[]
+  const products = productIds.length
+    ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, hsnCode: true } })
+    : []
+  const hsn = new Map(products.map((p) => [String(p.id), p.hsnCode]))
+
+  await prisma.orderItem.createMany({
+    data: lines.map((l, i) => ({
+      orderId,
+      productId: l.productId,
+      name: l.name,
+      sku: l.sku,
+      hsnCode: l.productId ? hsn.get(String(l.productId)) ?? null : null,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      discountPercent: l.discountPercent,
+      taxPercent: l.taxPercent,
+      total: l.total,
+      sortOrder: i * 10,
+    })),
+  })
+  await recalc('order', orderId)
+  return lines.length
+}
+
+/**
+ * Won deal → order + invoice, billed to the lead. One live order per deal.
+ * Does not reserve stock or check account credit — this path has no company.
+ */
+export async function placeOrderFromDeal(opts: {
+  dealId: bigint
+  actorId: bigint
+}): Promise<{ orderId: bigint; orderNumber: string; invoiceId?: bigint; invoiceNumber?: string }> {
+  const deal = await prisma.deal.findUnique({ where: { id: opts.dealId } })
+  if (!deal) throw new PlaceOrderError('Deal not found', 404)
+
+  const existing = await prisma.order.findFirst({
+    where: { dealId: deal.id, status: { not: 'cancelled' } },
+  })
+  if (existing) {
+    throw new PlaceOrderError(`This deal is already order ${existing.orderNumber}.`, 409, {
+      orderId: Number(existing.id),
+    })
+  }
+
+  const order = await prisma.order.create({
+    data: {
+      orderNumber: 'PENDING',
+      accountId: deal.accountId,
+      contactId: deal.primaryContactId,
+      dealId: deal.id,
+      leadId: deal.leadId,
+      currency: deal.currency,
+      ownerId: opts.actorId,
+      status: 'confirmed',
+    },
+  })
+
+  const numbered = await prisma.order.update({
+    where: { id: order.id },
+    data: { orderNumber: documentNumber('ORD', order.id) },
+  })
+
+  await copyDealLines(deal.id, order.id)
+  const lines = await prisma.orderItem.findMany({ where: { orderId: order.id } })
+
+  let invoiceId: bigint | undefined
+  let invoiceNumber: string | undefined
+  if (lines.length) {
+    const invoice = await prisma.crmInvoice.create({
+      data: {
+        invoiceNumber: 'PENDING',
+        accountId: deal.accountId,
+        contactId: deal.primaryContactId,
+        dealId: deal.id,
+        leadId: deal.leadId,
+        orderId: order.id,
+        currency: deal.currency,
+        dueDate: new Date(Date.now() + 30 * 86_400_000),
+        ownerId: opts.actorId,
+        createdById: opts.actorId,
+      },
+    })
+    invoiceNumber = documentNumber('INV', invoice.id)
+    await prisma.crmInvoice.update({ where: { id: invoice.id }, data: { invoiceNumber } })
+    await copyLines({ kind: 'order', id: order.id }, { kind: 'invoice', id: invoice.id })
+    invoiceId = invoice.id
+  }
+
+  if (deal.leadId) {
+    await markLeadBySlug(deal.leadId, 'confirmed', opts.actorId, `Order ${numbered.orderNumber} placed`)
+  }
+
+  await activity.recordSafe({
+    entityType: 'deal',
+    entityId: deal.id,
+    kind: 'system',
+    subject: `Order ${numbered.orderNumber} placed${invoiceNumber ? ` · invoice ${invoiceNumber}` : ''}`,
+    actorId: Number(opts.actorId),
+    meta: { orderId: Number(order.id), invoiceId: invoiceId ? Number(invoiceId) : undefined },
+  })
 
   return {
     orderId: numbered.id,

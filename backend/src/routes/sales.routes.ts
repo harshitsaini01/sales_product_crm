@@ -59,15 +59,21 @@ const lineBody = z.object({
 
 /** Account names for a page of documents, in one query rather than N. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function withAccounts<T extends { accountId: bigint | null }>(rows: T[]) {
+async function withAccounts<T extends { accountId: bigint | null; leadId?: bigint | null }>(rows: T[]) {
   const ids = [...new Set(rows.map((r) => r.accountId).filter(Boolean))] as bigint[]
   const accounts = ids.length
     ? await prisma.account.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
     : []
   const byId = new Map(accounts.map((a) => [String(a.id), a]))
+  const leadIds = [...new Set(rows.map((r) => r.leadId).filter(Boolean))] as bigint[]
+  const leads = leadIds.length
+    ? await prisma.lead.findMany({ where: { id: { in: leadIds } }, select: { id: true, name: true } })
+    : []
+  const byLead = new Map(leads.map((l) => [String(l.id), l]))
   return rows.map((r) => ({
     ...bigintFix(r),
     account: r.accountId ? (byId.get(String(r.accountId)) ?? null) : null,
+    lead: r.leadId ? (byLead.get(String(r.leadId)) ?? null) : null,
   }))
 }
 
@@ -995,16 +1001,18 @@ ordersRoutes.get('/:id', async (c) => {
   })
   if (!order) return c.json({ error: 'Order not found' }, 404)
 
-  const [account, contact, contract, deal] = await Promise.all([
+  const [account, contact, contract, deal, lead] = await Promise.all([
     order.accountId ? prisma.account.findUnique({ where: { id: order.accountId }, select: { id: true, name: true, email: true } }) : null,
     order.contactId ? prisma.contact.findUnique({ where: { id: order.contactId }, select: { id: true, firstName: true, lastName: true, email: true } }) : null,
     order.contractId ? prisma.contract.findUnique({ where: { id: order.contractId }, select: { id: true, contractNumber: true, title: true, status: true } }) : null,
     order.dealId ? prisma.deal.findUnique({ where: { id: order.dealId }, select: { id: true, name: true, dealNumber: true } }) : null,
+    order.leadId ? prisma.lead.findUnique({ where: { id: order.leadId }, select: { id: true, name: true, email: true, mobile: true } }) : null,
   ])
 
   return c.json({
     ...bigintFix(order),
     account,
+    lead: lead ? bigintFix(lead) : null,
     contact: contact ? { id: Number(contact.id), name: [contact.firstName, contact.lastName].filter(Boolean).join(' '), email: contact.email } : null,
     contract: bigintFix(contract),
     deal: bigintFix(deal),
@@ -1317,6 +1325,7 @@ ordersRoutes.post('/:id/invoice', async (c) => {
       accountId: order.accountId,
       contactId: order.contactId,
       dealId: order.dealId,
+      leadId: order.leadId,
       orderId: order.id,
       currency: order.currency,
       // 30 days is the ordinary default; the invoice screen can change it.
@@ -1547,7 +1556,7 @@ invoicesRoutes.post(
     if (!doc) return c.json({ error: 'Invoice not found' }, 404)
     if (!doc.items.length) return c.json({ error: 'This invoice has no line items — there is nothing to bill.' }, 400)
     const to = body.to || doc.to.email
-    if (!to) return c.json({ error: 'No email address. Add one to the contact or the account, or type one in.' }, 400)
+    if (!to) return c.json({ error: 'No email address. Add one to the lead, or type one in.' }, 400)
 
     const subject = body.subject || `Invoice ${doc.invoiceNumber} from ${doc.from.name}`
     let pdf: Buffer | null = null
@@ -1599,7 +1608,7 @@ invoicesRoutes.get('/:id', async (c) => {
   })
   if (!invoice) return c.json({ error: 'Invoice not found' }, 404)
 
-  const [account, deal, quote, contract] = await Promise.all([
+  const [account, deal, quote, contract, lead] = await Promise.all([
     invoice.accountId
       ? prisma.account.findUnique({
           where: { id: invoice.accountId },
@@ -1609,11 +1618,13 @@ invoicesRoutes.get('/:id', async (c) => {
     invoice.dealId ? prisma.deal.findUnique({ where: { id: invoice.dealId }, select: { id: true, name: true, dealNumber: true } }) : null,
     invoice.order?.quoteId ? prisma.quote.findUnique({ where: { id: invoice.order.quoteId }, select: { id: true, quoteNumber: true, status: true } }) : null,
     invoice.order?.contractId ? prisma.contract.findUnique({ where: { id: invoice.order.contractId }, select: { id: true, contractNumber: true, title: true, status: true } }) : null,
+    invoice.leadId ? prisma.lead.findUnique({ where: { id: invoice.leadId }, select: { id: true, name: true, email: true, mobile: true } }) : null,
   ])
 
   return c.json({
     ...bigintFix(invoice),
     account,
+    lead: lead ? bigintFix(lead) : null,
     deal: bigintFix(deal),
     quote: bigintFix(quote),
     contract: bigintFix(contract),

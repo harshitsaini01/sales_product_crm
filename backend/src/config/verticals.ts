@@ -338,11 +338,11 @@ export const VERTICALS: VerticalPreset[] = [
     key: 'product_sales',
     label: 'Product + Stock Sales',
     description:
-      'Leads with a simple product catalog. Send products (photo, price, description) from the lead. No company conversion or quote/order paperwork.',
+      'Leads, catalog send, deal board, then won → order + GST invoice and Packed / Out for delivery / Delivered.',
     features: {
       accounts: false,
       deals: true,
-      sales_docs: false,
+      sales_docs: true,
       custom_fields: false,
       projects: false,
       students: false,
@@ -419,6 +419,18 @@ export const VERTICALS: VerticalPreset[] = [
         { slug: 'not-interested', title: 'Not Interested', priority: 90 },
       ],
       followupStatuses: EDUCATION_SEED.followupStatuses,
+      lostReasons: ['Price', 'Not interested', 'Went elsewhere', 'No response', 'Other'],
+      pipelines: [
+        {
+          name: 'Product Sales',
+          stages: [
+            { name: 'New', probability: 10 },
+            { name: 'Negotiation', probability: 50 },
+            { name: 'Won', probability: 100, isWon: true },
+            { name: 'Lost', probability: 0, isLost: true },
+          ],
+        },
+      ],
     },
   },
 ]

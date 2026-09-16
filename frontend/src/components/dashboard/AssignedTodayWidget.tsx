@@ -30,11 +30,11 @@ export function AssignedTodayWidget() {
   const leads = data?.data ?? []
 
   return (
-    <div className="bg-card border rounded-xl shadow-sm">
+    <div className="surface">
       <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b">
         <div>
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <UserPlus className="h-4 w-4 text-indigo-600" />
+          <h2 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
+            <UserPlus className="h-4 w-4 text-primary" />
             Assigned to Me Today
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">

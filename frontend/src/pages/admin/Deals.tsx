@@ -1,19 +1,20 @@
-import { useMemo, useState } from 'react'
-import { Link } from '@tanstack/react-router'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus, X, LayoutGrid, AlertTriangle, Search, List, Kanban, Clock, Flame } from 'lucide-react'
 import {
-  dealsApi, pipelinesApi, formatMoney, compactMoney,
-  type Deal, type BoardColumn,
+  dealsApi, pipelinesApi, productsApi, formatMoney, compactMoney,
+  type Deal, type BoardColumn, type Product,
 } from '@/lib/deals-api'
-import { accountsApi, contactsApi } from '@/lib/crm-api'
+import { leadsApi } from '@/lib/api'
 import { usersApi } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth.store'
 import { useLabels } from '@/hooks/useLabels'
 import { LostDealModal } from '@/components/crm/LostDealModal'
 import { StatusPill } from '@/components/crm/DocumentLines'
 import { cn } from '@/lib/utils'
+import type { Lead } from '@/types'
 
 /**
  * The deal board.
@@ -32,6 +33,7 @@ const STALE_DAYS = 14
 
 export default function Deals() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const t = useLabels()
   const me = useAuthStore((s) => s.user)
   const isAdmin = useAuthStore((s) => s.isAdmin)
@@ -46,6 +48,8 @@ export default function Deals() {
   const [dragging, setDragging] = useState<number | null>(null)
   const [overStage, setOverStage] = useState<number | null>(null)
   const [losing, setLosing] = useState<{ deal: Deal; stageId: number } | null>(null)
+  const [winning, setWinning] = useState<{ deal: Deal; stageId: number } | null>(null)
+  const [placing, setPlacing] = useState(false)
 
   const { data: pipelines = [] } = useQuery({ queryKey: ['pipelines'], queryFn: pipelinesApi.list })
   const { data: owners = [] } = useQuery({
@@ -88,7 +92,36 @@ export default function Deals() {
       setLosing({ deal, stageId: stage.id })
       return
     }
+    if (stage.isWon) {
+      setWinning({ deal, stageId: stage.id })
+      return
+    }
     move.mutate({ id, stageId: stage.id })
+  }
+
+  async function confirmWin() {
+    if (!winning) return
+    setPlacing(true)
+    try {
+      await dealsApi.moveStage(winning.deal.id, winning.stageId)
+      try {
+        const r = await dealsApi.placeOrder(winning.deal.id)
+        toast.success(`Order ${r.orderNumber} placed${r.invoiceNumber ? ` · ${r.invoiceNumber}` : ''}`)
+        setWinning(null)
+        refresh()
+        navigate({ to: '/app/orders/$orderId', params: { orderId: String(r.orderId) } })
+      } catch (e: unknown) {
+        const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+        toast.error(msg || 'Won, but could not place the order. Add products and try again from the deal.')
+        setWinning(null)
+        refresh()
+      }
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      toast.error(msg || 'Could not move that deal')
+    } finally {
+      setPlacing(false)
+    }
   }
 
   const isStale = (d: Deal) =>
@@ -250,6 +283,22 @@ export default function Deals() {
           onConfirm={(lostReasonId, lostNotes) => move.mutate({ id: losing.deal.id, stageId: losing.stageId, lost: { lostReasonId, lostNotes } })}
         />
       )}
+      {winning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !placing && setWinning(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold">Place the order?</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Marking <span className="font-medium text-foreground">{winning.deal.name}</span> as won raises an order and invoice from its products.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button disabled={placing} onClick={() => setWinning(null)} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent">Cancel</button>
+              <button disabled={placing} onClick={() => void confirmWin()} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                {placing ? 'Placing…' : 'Won + place order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -284,7 +333,8 @@ function DealCard({ deal, stale, onDragStart }: { deal: Deal; stale: boolean; on
       className={cn('block cursor-grab rounded-lg border bg-card p-3 shadow-sm transition-shadow hover:shadow active:cursor-grabbing', stale && 'border-amber-200')}
     >
       <p className="truncate text-sm font-medium">{deal.name}</p>
-      {deal.account && <p className="mt-0.5 truncate text-xs text-muted-foreground">{deal.account.name}</p>}
+      {deal.lead && <p className="mt-0.5 truncate text-xs text-muted-foreground">{deal.lead.name}</p>}
+      {!deal.lead && deal.account && <p className="mt-0.5 truncate text-xs text-muted-foreground">{deal.account.name}</p>}
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-semibold">{compactMoney(deal.value, deal.currency)}</span>
@@ -357,7 +407,7 @@ function DealTable({ deals, stale }: { deals: Deal[]; stale: (d: Deal) => boolea
             <tr key={d.id} className={cn('border-t hover:bg-accent/40', stale(d) && 'bg-amber-50/30 dark:bg-amber-950/10')}>
               <td className="px-3 py-2">
                 <Link to="/app/deals/$dealId" params={{ dealId: String(d.id) }} className="font-medium hover:text-primary">{d.name}</Link>
-                <p className="text-xs text-muted-foreground">{[d.dealNumber, d.account?.name].filter(Boolean).join(' · ')}</p>
+                <p className="text-xs text-muted-foreground">{[d.dealNumber, d.lead?.name ?? d.account?.name].filter(Boolean).join(' · ')}</p>
               </td>
               <td className="px-3 py-2">
                 <StatusPill status={d.stage?.name ?? '—'} />
@@ -388,36 +438,53 @@ export function NewDealModal({
   onCreated: (deal: Deal) => void
   pipelines: { id: number; name: string; isDefault: boolean; stages: { id: number; name: string; isWon: boolean; isLost: boolean }[] }[]
   defaultPipelineId?: number
-  defaults?: { accountId?: number | null; accountName?: string | null; contactId?: number | null; name?: string; value?: number | null }
+  defaults?: { leadId?: number | null; leadName?: string | null; accountId?: number | null; accountName?: string | null; contactId?: number | null; name?: string; value?: number | null }
 }) {
   const t = useLabels()
   const me = useAuthStore((s) => s.user)
   const isAdmin = useAuthStore((s) => s.isAdmin)
   const [form, setForm] = useState<Record<string, unknown>>({
     name: defaults?.name ?? '',
+    leadId: defaults?.leadId ?? null,
     accountId: defaults?.accountId ?? null,
     primaryContactId: defaults?.contactId ?? null,
     value: defaults?.value ?? null,
     pipelineId: defaultPipelineId ?? pipelines.find((p) => p.isDefault)?.id ?? pipelines[0]?.id,
   })
-  const [accountSearch, setAccountSearch] = useState('')
-  const [accountName, setAccountName] = useState(defaults?.accountName ?? '')
+  const [leadSearch, setLeadSearch] = useState('')
+  const [leadName, setLeadName] = useState(defaults?.leadName ?? '')
+  const [picked, setPicked] = useState<number[]>([])
+  const [productSearch, setProductSearch] = useState('')
 
-  const { data: accounts } = useQuery({
-    queryKey: ['accounts', 'picker', accountSearch],
-    queryFn: () => accountsApi.list({ search: accountSearch || undefined, limit: 10 }),
-    enabled: accountSearch.length > 1,
+  const chosenLead = form.leadId as number | null
+  const { data: leadHits } = useQuery({
+    queryKey: ['leads', 'picker', leadSearch],
+    queryFn: () => leadsApi.list({ search: leadSearch, limit: '10' }),
+    enabled: leadSearch.length > 1 && !chosenLead,
   })
-  const chosen = form.accountId as number | null
-  const { data: contacts } = useQuery({
-    queryKey: ['contacts', 'byAccount', chosen],
-    queryFn: () => contactsApi.list({ accountId: chosen, limit: 50 }),
-    enabled: !!chosen,
+  const { data: catalogSends } = useQuery({
+    queryKey: ['lead-catalog-sends', chosenLead],
+    queryFn: () => leadsApi.catalogSends(chosenLead!),
+    enabled: !!chosenLead,
+  })
+  const { data: products = [] } = useQuery({
+    queryKey: ['products'],
+    queryFn: () => productsApi.list(),
   })
   const { data: owners = [] } = useQuery({ queryKey: ['users', 'counsellors'], queryFn: usersApi.counsellors, enabled: isAdmin() })
 
+  useEffect(() => {
+    const last = catalogSends?.[0]
+    const ids = (last?.items ?? []).map((i) => i.productId).filter((id): id is number => !!id)
+    if (ids.length) setPicked(ids)
+  }, [catalogSends])
+
   const create = useMutation({
-    mutationFn: () => dealsApi.create(form),
+    mutationFn: () =>
+      dealsApi.create({
+        ...form,
+        products: picked.map((productId) => ({ productId, quantity: 1 })),
+      }),
     onSuccess: (d) => {
       toast.success(`${t('deal')} created`)
       onCreated(d)
@@ -430,6 +497,12 @@ export function NewDealModal({
   const input = 'w-full rounded-lg border bg-background px-3 py-2 text-sm'
   const pipeline = pipelines.find((p) => p.id === form.pipelineId)
   const openStages = (pipeline?.stages ?? []).filter((s) => !s.isWon && !s.isLost)
+  const leadRows = ((leadHits?.data ?? []) as Lead[])
+  const visibleProducts = (products as Product[]).filter((p) => {
+    if (!productSearch.trim()) return true
+    const q = productSearch.toLowerCase()
+    return p.name.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q)
+  })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -442,24 +515,35 @@ export function NewDealModal({
         <div className="space-y-3">
           <div>
             <label className="mb-1 block text-sm font-medium">Name *</label>
-            <input className={input} placeholder="CRM licence — 50 seats" value={String(form.name ?? '')} onChange={(e) => set('name', e.target.value)} autoFocus />
+            <input className={input} placeholder="Order for…" value={String(form.name ?? '')} onChange={(e) => set('name', e.target.value)} autoFocus />
           </div>
 
+          {!defaults?.accountId && (
           <div>
-            <label className="mb-1 block text-sm font-medium">{t('account')}</label>
-            {chosen ? (
+            <label className="mb-1 block text-sm font-medium">Customer *</label>
+            {chosenLead ? (
               <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-                <span>{accountName || accounts?.data.find((a) => a.id === chosen)?.name || `#${chosen}`}</span>
-                <button onClick={() => { set('accountId', null); set('primaryContactId', null); setAccountName('') }} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                <span>{leadName || `#${chosenLead}`}</span>
+                <button onClick={() => { set('leadId', null); setLeadName(''); setPicked([]) }} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
               </div>
             ) : (
               <>
-                <input className={input} placeholder="Search companies…" value={accountSearch} onChange={(e) => setAccountSearch(e.target.value)} />
-                {!!accounts?.data.length && (
+                <input className={input} placeholder="Search by name, email or mobile…" value={leadSearch} onChange={(e) => setLeadSearch(e.target.value)} />
+                {!!leadRows.length && (
                   <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border">
-                    {accounts.data.map((a) => (
-                      <button key={a.id} onClick={() => { set('accountId', a.id); setAccountName(a.name); setAccountSearch('') }} className="block w-full px-3 py-2 text-left text-sm hover:bg-accent">
-                        {a.name}
+                    {leadRows.map((l) => (
+                      <button
+                        key={l.id}
+                        onClick={() => {
+                          set('leadId', l.id)
+                          setLeadName(l.name)
+                          setLeadSearch('')
+                          if (!String(form.name ?? '').trim()) set('name', `${l.name} — order`)
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                      >
+                        <span className="font-medium">{l.name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{[l.email, l.mobile].filter(Boolean).join(' · ')}</span>
                       </button>
                     ))}
                   </div>
@@ -467,28 +551,32 @@ export function NewDealModal({
               </>
             )}
           </div>
-
-          {!!chosen && !!contacts?.data.length && (
-            <div>
-              <label className="mb-1 block text-sm font-medium">Primary {t('contact').toLowerCase()}</label>
-              <select className={input} value={String(form.primaryContactId ?? '')} onChange={(e) => set('primaryContactId', e.target.value ? Number(e.target.value) : null)}>
-                <option value="">Nobody yet</option>
-                {contacts.data.map((c) => (
-                  <option key={c.id} value={c.id}>{c.fullName}{c.jobTitle ? ` · ${c.jobTitle}` : ''}</option>
-                ))}
-              </select>
-            </div>
           )}
 
+          <div>
+            <label className="mb-1 block text-sm font-medium">Products</label>
+            <input className={`${input} mb-2`} placeholder="Search catalog…" value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
+            <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border p-2">
+              {!visibleProducts.length && <p className="py-4 text-center text-xs text-muted-foreground">No products yet.</p>}
+              {visibleProducts.map((p) => {
+                const on = picked.includes(p.id)
+                return (
+                  <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => setPicked((ids) => on ? ids.filter((x) => x !== p.id) : [...ids, p.id])}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{formatMoney(p.unitPrice, p.currency)}</span>
+                  </label>
+                )
+              })}
+            </div>
+            {!!picked.length && <p className="mt-1 text-xs text-muted-foreground">{picked.length} selected{catalogSends?.[0] ? ' · started from last catalog send' : ''}</p>}
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Value (₹)</label>
-              <input type="number" className={input} value={String(form.value ?? '')} onChange={(e) => set('value', e.target.value ? Number(e.target.value) : null)} />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Expected close</label>
-              <input type="date" className={input} value={String(form.expectedCloseDate ?? '')} onChange={(e) => set('expectedCloseDate', e.target.value || null)} />
-            </div>
             {pipelines.length > 1 && (
               <div>
                 <label className="mb-1 block text-sm font-medium">Pipeline</label>
@@ -515,21 +603,12 @@ export function NewDealModal({
                 </select>
               </div>
             )}
-            <div>
-              <label className="mb-1 block text-sm font-medium">Source</label>
-              <input className={input} placeholder="Referral, website, cold call…" value={String(form.source ?? '')} onChange={(e) => set('source', e.target.value || null)} />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium">Next step</label>
-            <input className={input} placeholder="Send the proposal by Friday" value={String(form.nextStep ?? '')} onChange={(e) => set('nextStep', e.target.value)} />
           </div>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent">Cancel</button>
-          <button onClick={() => create.mutate()} disabled={!String(form.name ?? '').trim() || create.isPending} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+          <button onClick={() => create.mutate()} disabled={!String(form.name ?? '').trim() || (!chosenLead && !form.accountId) || create.isPending} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
             Create
           </button>
         </div>

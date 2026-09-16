@@ -495,8 +495,8 @@ export function Leads() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
-          {data && <p className="text-sm text-muted-foreground mt-0.5">{data.total?.toLocaleString()} leads total</p>}
+          <h1 className="page-title">Leads</h1>
+          {data && <p className="page-sub">{data.total?.toLocaleString()} leads total</p>}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-3 py-2 text-sm border rounded-lg hover:bg-accent transition-colors">

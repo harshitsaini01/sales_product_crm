@@ -51,17 +51,17 @@ function StatCard({ title, value, icon: Icon, color, description, to }: {
   title: string; value: number; icon: React.ComponentType<{ className?: string }>; color: string; description?: string; to?: string
 }) {
   const body = (
-    <div className="bg-card border rounded-xl p-5 shadow-sm hover:shadow-md hover:border-primary/30 transition-all h-full">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
-          <div className="flex items-baseline gap-2 mt-1">
-            <p className="text-3xl font-black">{value.toLocaleString()}</p>
-            {description && <span className="text-[10px] text-muted-foreground font-medium">{description}</span>}
+    <div className="bg-card border rounded-xl p-5 h-full hover:border-primary/30 transition-colors">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
+          <div className="flex items-baseline gap-2 mt-1.5">
+            <p className="text-2xl font-semibold tabular-nums tracking-tight">{value.toLocaleString()}</p>
+            {description && <span className="text-[11px] text-muted-foreground font-medium truncate">{description}</span>}
           </div>
         </div>
-        <div className={`p-3 rounded-2xl ${color} bg-opacity-10`}>
-          <Icon className={`h-6 w-6 ${color.replace('bg-', 'text-')}`} />
+        <div className={`h-10 w-10 shrink-0 rounded-lg flex items-center justify-center ${color}`}>
+          <Icon className="h-5 w-5" />
         </div>
       </div>
     </div>
@@ -201,18 +201,18 @@ export function Dashboard() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black tracking-tight flex items-center gap-3">
-            Welcome back, <span className="text-primary">{user?.name.split(' ')[0]}</span>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Welcome back, {user?.name.split(' ')[0]}
           </h1>
-          <p className="text-muted-foreground mt-1 font-medium">
+          <p className="text-muted-foreground mt-1 text-sm">
             {isAdmin ? "Here's what's happening across the organization today." : "Here are your personal performance metrics and follow-ups."}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/app/leads/new" className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center gap-2">
+          <Link to="/app/leads/new" className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
             <UserPlus className="h-4 w-4" />
             Add New Lead
           </Link>
@@ -225,35 +225,35 @@ export function Dashboard() {
           title={isAdmin ? "Total Leads" : "My Leads"}
           value={stats?.totalLeads || 0}
           icon={Users}
-          color="bg-blue-600"
+          color="bg-primary/10 text-primary"
           to="/app/leads"
         />
         <StatCard
           title="New Today"
           value={stats?.todayLeads || 0}
           icon={UserPlus}
-          color="bg-emerald-600"
+          color="bg-emerald-500/10 text-emerald-700"
           to={`/app/leads?fromDate=${todayISO()}&toDate=${todayISO()}`}
         />
         <StatCard
           title="This Week"
           value={stats?.weekLeads || 0}
           icon={TrendingUp}
-          color="bg-violet-600"
+          color="bg-sky-500/10 text-sky-700"
           to={`/app/leads?fromDate=${todayISO(-7)}`}
         />
         <StatCard
           title="This Month"
           value={stats?.monthLeads || 0}
           icon={Calendar}
-          color="bg-orange-600"
+          color="bg-amber-500/10 text-amber-700"
           to={`/app/leads?fromDate=${monthStartISO()}`}
         />
         <StatCard
           title="Follow-ups"
           value={stats?.todayFollowups || 0}
           icon={CalendarClock}
-          color="bg-amber-600"
+          color="bg-teal-500/10 text-teal-700"
           description="Due Today"
           to={`/app/leads?followupFrom=${todayISO()}&followupTo=${todayISO()}`}
         />
@@ -261,7 +261,7 @@ export function Dashboard() {
           title="Overdue"
           value={stats?.overdueFollowups || 0}
           icon={AlertCircle}
-          color="bg-red-600"
+          color="bg-red-500/10 text-red-700"
           description="Follow-ups"
           to="/app/leads?overdue=1"
         />
@@ -269,7 +269,7 @@ export function Dashboard() {
           title="Active Pipeline"
           value={stats?.activeLeads || 0}
           icon={Activity}
-          color="bg-indigo-600"
+          color="bg-slate-500/10 text-slate-700"
           description="Open leads"
           to="/app/leads"
         />
@@ -288,30 +288,20 @@ export function Dashboard() {
       <CallStatsWidget />
 
       {/* Today's acquisition snapshot — ranked, scannable and filterable. */}
-      <div className="bg-card border rounded-2xl p-6 shadow-sm">
+      <div className="bg-card border rounded-xl p-6">
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-6">
-          <div className="flex items-start gap-3">
-            <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black">Lead Intelligence</h2>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Live
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1 font-medium">
-                Acquisition momentum, source health and operational signals from real lead data
-              </p>
-            </div>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Lead Intelligence</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Acquisition momentum, source health and operational signals from real lead data
+            </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden sm:inline text-xs font-semibold text-muted-foreground">Compare performance</span>
+            <span className="hidden sm:inline text-xs font-medium text-muted-foreground">Compare performance</span>
             <select
               value={trendPeriod}
               onChange={(e) => setTrendPeriod(e.target.value as 'week' | 'month')}
-              className="rounded-lg border bg-background px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-primary/20"
+              className="rounded-lg border bg-background px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-primary/20"
             >
               <option value="week">Last 7 days</option>
               <option value="month">Last 30 days</option>
@@ -467,7 +457,7 @@ export function Dashboard() {
       {/* Lead volume and current pipeline position. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Lead Trend */}
-        <div className="bg-card border rounded-xl p-6 shadow-sm lg:col-span-2">
+        <div className="bg-card border rounded-xl p-6 lg:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
             <div>
               <h2 className="text-lg font-bold">Acquisition Velocity</h2>
@@ -558,7 +548,7 @@ export function Dashboard() {
         </div>
 
         {/* By Status — each row deep-links */}
-        <div className="bg-card border rounded-xl p-6 shadow-sm">
+        <div className="bg-card border rounded-xl p-6">
           <div className="mb-6 flex items-start gap-3">
             <div className="rounded-xl bg-violet-500/10 p-2.5 text-violet-600">
               <GitBranch className="h-5 w-5" />
@@ -618,7 +608,7 @@ export function Dashboard() {
 
       {/* Source movement, contribution and period-over-period health. */}
       {isAdmin && sourceData.length > 0 && (
-        <div className="bg-card border rounded-xl p-6 shadow-sm">
+        <div className="bg-card border rounded-xl p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-lg font-bold">Source Momentum</h2>

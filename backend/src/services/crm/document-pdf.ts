@@ -76,6 +76,22 @@ export async function partyForAccount(accountId: bigint | null, contactId: bigin
   }
 }
 
+export async function partyForLead(leadId: bigint | null): Promise<Party> {
+  if (!leadId) return { name: 'Customer' }
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { name: true, email: true, mobile: true, homeAddress: true, city: true, state: true, pincode: true },
+  })
+  if (!lead) return { name: 'Customer' }
+  return {
+    name: lead.name || 'Customer',
+    email: lead.email,
+    phone: lead.mobile,
+    address: [lead.homeAddress, lead.city, lead.state, lead.pincode].filter(Boolean).join(', ') || null,
+    state: lead.state,
+  }
+}
+
 // ═══ INVOICE ═════════════════════════════════════════════════════════════════
 
 export interface InvoiceDoc {
@@ -105,7 +121,10 @@ export async function buildInvoiceDoc(id: bigint): Promise<InvoiceDoc | null> {
     include: { items: { orderBy: { sortOrder: 'asc' } }, payments: { orderBy: { paymentDate: 'asc' } }, order: { select: { orderNumber: true } } },
   })
   if (!inv) return null
-  const [from, to] = await Promise.all([letterhead(), partyForAccount(inv.accountId, inv.contactId)])
+  const [from, to] = await Promise.all([
+    letterhead(),
+    inv.accountId ? partyForAccount(inv.accountId, inv.contactId) : partyForLead(inv.leadId),
+  ])
   return {
     invoiceNumber: inv.invoiceNumber,
     status: inv.status,

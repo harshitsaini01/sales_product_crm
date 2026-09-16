@@ -523,7 +523,7 @@ export const leadsApi = {
     api.post('/leads/bulk-restore', { leadIds }).then((r) => r.data),
   bulkPermanentDelete: (leadIds: number[]) =>
     api.post('/leads/bulk-permanent-delete', { leadIds }).then((r) => r.data),
-  sendCatalog: (id: number, data: { productIds: number[]; channel: 'email' | 'whatsapp'; note?: string }) =>
+  sendCatalog: (id: number, data: { productIds: number[]; channel: 'email' | 'whatsapp'; note?: string; templateId?: number }) =>
     api.post(`/leads/${id}/send-catalog`, data).then((r) => r.data as CatalogSendResult),
   catalogSends: (id: number) =>
     api.get(`/leads/${id}/catalog-sends`).then((r) => r.data as CatalogSend[]),
@@ -780,6 +780,7 @@ export const branchesApi = {
 export const settingsApi = {
   get: () => api.get('/settings').then((r) => r.data),
   setPageLimit: (limit: number) => api.patch('/settings/page-limit', { limit }).then((r) => r.data),
+  setLetterhead: (body: Record<string, string>) => api.patch('/settings', body).then((r) => r.data as Record<string, string>),
 }
 
 export interface InactivityStatus {

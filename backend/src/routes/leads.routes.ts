@@ -1652,9 +1652,10 @@ leadsRoutes.post('/:id/wapp', async (c) => {
 })
 
 const sendCatalogSchema = z.object({
-  productIds: z.array(z.number().int().positive()).min(1).max(50),
+  productIds: z.array(z.number().int().positive()).max(50).default([]),
   channel: z.enum(['email', 'whatsapp']),
   note: z.string().max(2000).optional(),
+  templateId: z.number().int().positive().optional(),
 })
 
 leadsRoutes.get('/:id/catalog-sends', async (c) => {
@@ -1676,6 +1677,7 @@ leadsRoutes.post('/:id/send-catalog', zValidator('json', sendCatalogSchema), asy
       productIds: body.productIds.map((id) => BigInt(id)),
       channel: body.channel,
       note: body.note,
+      templateId: body.templateId ? BigInt(body.templateId) : undefined,
     })
     return c.json(bigintFix(result))
   } catch (err) {

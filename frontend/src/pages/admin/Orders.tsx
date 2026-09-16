@@ -97,7 +97,7 @@ export default function Orders() {
                     <StatusPill status={o.status} />
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {o.account?.name ?? 'No account'} ·{' '}
+                    {o.lead?.name ?? o.account?.name ?? 'No customer'} ·{' '}
                     {new Date(o.orderDate).toLocaleDateString('en-IN')}
                     {o._count && ` · ${o._count.items} lines, ${o._count.invoices} invoices`}
                   </p>

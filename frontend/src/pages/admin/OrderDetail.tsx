@@ -2,10 +2,9 @@ import { useState } from 'react'
 import { Link, useParams, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowLeft, Building2, Receipt, FileSignature, Handshake, FileText, User, Check, Pencil, X, Save, Truck } from 'lucide-react'
+import { ArrowLeft, Building2, Receipt, Handshake, User, Check, Pencil, X, Save, Truck } from 'lucide-react'
 import { ordersApi, ORDER_STATUSES, type Order } from '@/lib/sales-api'
 import { commerceApi } from '@/lib/commerce-api'
-import { downloadBlob } from '@/lib/utils'
 import { formatMoney } from '@/lib/deals-api'
 import { DocumentLines, StatusPill } from '@/components/crm/DocumentLines'
 import { DeleteButton } from '@/components/crm/DeleteButton'
@@ -62,16 +61,6 @@ export default function OrderDetail() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (e: any) => toast.error(e?.response?.data?.error || 'Could not raise an invoice', { duration: 7000 }),
   })
-  const drawContract = useMutation({
-    mutationFn: () => ordersApi.contract(id),
-    onSuccess: (ct) => {
-      toast.success(`Contract ${ct.contractNumber} drawn up`)
-      refresh()
-      navigate({ to: '/app/contracts/$contractId', params: { contractId: String(ct.id) } })
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (e: any) => toast.error(e?.response?.data?.error || 'Could not draw up a contract'),
-  })
 
   if (isLoading) return <p className="py-12 text-center text-sm text-muted-foreground">Loading…</p>
   if (!order) return <p className="py-12 text-center text-sm">Not found.</p>
@@ -88,7 +77,7 @@ export default function OrderDetail() {
         <ArrowLeft className="h-4 w-4" /> All orders
       </Link>
 
-      <ChainBar current={{ kind: 'order', id }} />
+      <ChainBar current={{ kind: 'order', id }} simple hideNext />
 
       <div className="rounded-xl border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -98,20 +87,15 @@ export default function OrderDetail() {
               <StatusPill status={order.status} />
             </div>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              {order.account ? (
-                <Link to="/app/accounts/$accountId" params={{ accountId: String(order.account.id) }} className="inline-flex items-center gap-1 hover:text-primary"><Building2 className="h-3.5 w-3.5" /> {order.account.name}</Link>
-              ) : (
-                <span>No account</span>
+              {order.lead && (
+                <Link to="/app/leads/$leadId" params={{ leadId: String(order.lead.id) }} className="inline-flex items-center gap-1 hover:text-primary"><User className="h-3.5 w-3.5" /> {order.lead.name}</Link>
               )}
-              {order.contact && <span className="inline-flex items-center gap-1"><User className="h-3.5 w-3.5" /> {order.contact.name}</span>}
+              {order.account && (
+                <Link to="/app/accounts/$accountId" params={{ accountId: String(order.account.id) }} className="inline-flex items-center gap-1 hover:text-primary"><Building2 className="h-3.5 w-3.5" /> {order.account.name}</Link>
+              )}
+              {!order.lead && !order.account && <span>No customer</span>}
               {order.deal && (
                 <Link to="/app/deals/$dealId" params={{ dealId: String(order.deal.id) }} className="inline-flex items-center gap-1 hover:text-primary"><Handshake className="h-3.5 w-3.5" /> {order.deal.name}</Link>
-              )}
-              {order.quote && (
-                <Link to="/app/quotes/$quoteId" params={{ quoteId: String(order.quote.id) }} className="inline-flex items-center gap-1 hover:text-primary"><FileText className="h-3.5 w-3.5" /> from {order.quote.quoteNumber}</Link>
-              )}
-              {order.contract && (
-                <Link to="/app/contracts/$contractId" params={{ contractId: String(order.contract.id) }} className="inline-flex items-center gap-1 hover:text-primary"><FileSignature className="h-3.5 w-3.5" /> under {order.contract.contractNumber}</Link>
               )}
               <span>ordered {new Date(order.orderDate).toLocaleDateString('en-IN')}</span>
               {order.deliveryDate && <span className="inline-flex items-center gap-1"><Truck className="h-3.5 w-3.5" /> delivery {new Date(order.deliveryDate).toLocaleDateString('en-IN')}</span>}
@@ -150,31 +134,11 @@ export default function OrderDetail() {
               <Receipt className="h-3.5 w-3.5" /> Raise invoice
             </button>
           )}
-          {!order.contract && order.status !== 'cancelled' && (
-            <button onClick={() => drawContract.mutate()} disabled={drawContract.isPending} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-accent disabled:opacity-50">
-              <FileSignature className="h-3.5 w-3.5" /> Draw up a contract
-            </button>
-          )}
-          {order.status === 'delivered' && (
-            <button
-              onClick={() => ordersApi.returnOrder(id).then(() => { toast.success('Return / credit note raised'); refresh() }).catch((e) => toast.error(e?.response?.data?.error || 'Could not return'))}
-              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-accent"
-            >
-              Raise return / credit note
-            </button>
-          )}
-          <button
-            onClick={() => ordersApi.challan(id).then((b) => downloadBlob(b, `${order.orderNumber}-challan.pdf`)).catch(() => toast.error('Could not open challan'))}
-            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-accent"
-          >
-            Delivery challan
-          </button>
-          <button
-            onClick={() => ordersApi.packingList(id).then((b) => downloadBlob(b, `${order.orderNumber}-packing.pdf`)).catch(() => toast.error('Could not open packing list'))}
-            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-accent"
-          >
-            Packing list
-          </button>
+          {liveInvoices.map((inv) => (
+            <Link key={inv.id} to="/app/invoices/$invoiceId" params={{ invoiceId: String(inv.id) }} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-accent">
+              <Receipt className="h-3.5 w-3.5" /> {inv.invoiceNumber}
+            </Link>
+          ))}
           <DeleteButton
             what="order"
             label={order.orderNumber}

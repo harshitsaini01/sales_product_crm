@@ -21,6 +21,8 @@ import * as activity from '../services/crm/activity.service'
 import * as customFields from '../services/crm/custom-fields.service'
 import { bigintFix } from '../services/crm/serialize'
 import { lineTotal, serializeDeal } from '../services/crm/deals.service'
+import { placeOrderFromDeal, PlaceOrderError } from '../services/crm/place-order.service'
+import { markLeadBySlug } from '../services/leads/lifecycle.service'
 
 export const dealsRoutes = new Hono()
 
@@ -36,6 +38,7 @@ const dealBody = z.object({
   name: z.string().min(1).max(200),
   accountId: z.number().nullish(),
   primaryContactId: z.number().nullish(),
+  leadId: z.number().nullish(),
   pipelineId: z.number().optional(),
   stageId: z.number().optional(),
   ownerId: z.number().nullish(),
@@ -48,7 +51,22 @@ const dealBody = z.object({
   nextStep: z.string().max(255).nullish(),
   notes: z.string().nullish(),
   customFields: z.record(z.unknown()).optional(),
+  products: z
+    .array(
+      z.object({
+        productId: z.number(),
+        quantity: z.number().positive().default(1),
+      }),
+    )
+    .optional(),
 })
+
+async function leadsByIds(ids: (bigint | null | undefined)[]) {
+  const leadIds = [...new Set(ids.filter(Boolean))] as bigint[]
+  if (!leadIds.length) return new Map<string, { id: bigint; name: string }>()
+  const rows = await prisma.lead.findMany({ where: { id: { in: leadIds } }, select: { id: true, name: true } })
+  return new Map(rows.map((l) => [String(l.id), l]))
+}
 
 /** The pipeline a deal lands in when the caller does not name one. */
 async function defaultPipeline() {
@@ -71,6 +89,7 @@ dealsRoutes.get('/', async (c) => {
     ...(q.pipelineId ? { pipelineId: BigInt(q.pipelineId) } : {}),
     ...(q.stageId ? { stageId: BigInt(q.stageId) } : {}),
     ...(q.accountId ? { accountId: BigInt(q.accountId) } : {}),
+    ...(q.leadId ? { leadId: BigInt(q.leadId) } : {}),
     ...(q.ownerId ? { ownerId: BigInt(q.ownerId) } : {}),
     ...(q.search ? { name: { contains: q.search.trim(), mode: 'insensitive' as const } } : {}),
     // `open=1` is the default view a rep wants: everything still winnable.
@@ -100,10 +119,11 @@ dealsRoutes.get('/', async (c) => {
     ? await prisma.account.findMany({ where: { id: { in: accountIds } }, select: { id: true, name: true } })
     : []
   const byId = new Map(accounts.map((a) => [String(a.id), a]))
+  const byLead = await leadsByIds(rows.map((d) => d.leadId))
 
   return c.json(
     buildPaginatedResult(
-      rows.map((d) => serializeDeal(d, byId.get(String(d.accountId)))),
+      rows.map((d) => serializeDeal(d, byId.get(String(d.accountId)), byLead.get(String(d.leadId)))),
       total,
       page,
       limit,
@@ -160,6 +180,7 @@ dealsRoutes.get('/board', async (c) => {
     ? await prisma.account.findMany({ where: { id: { in: accountIds } }, select: { id: true, name: true } })
     : []
   const byAccount = new Map(accounts.map((a) => [String(a.id), a]))
+  const byLead = await leadsByIds(deals.map((d) => d.leadId))
 
   // When each deal was last touched — the board's staleness signal. One
   // grouped query for the whole board rather than one per card.
@@ -178,7 +199,7 @@ dealsRoutes.get('/board', async (c) => {
     if (!byStage.has(key)) byStage.set(key, [])
     const last = touchedAt.get(String(d.id)) ?? d.updatedAt
     byStage.get(key)!.push({
-      ...serializeDeal(d, byAccount.get(String(d.accountId))),
+      ...serializeDeal(d, byAccount.get(String(d.accountId)), byLead.get(String(d.leadId))),
       lastActivityAt: last ? new Date(last).toISOString() : null,
     })
   }
@@ -379,7 +400,7 @@ dealsRoutes.get('/:id', async (c) => {
 
 dealsRoutes.post('/', zValidator('json', dealBody), async (c) => {
   const user = c.get('user')
-  const { customFields: cf, ...body } = c.req.valid('json')
+  const { customFields: cf, products: productPicks, ...body } = c.req.valid('json')
 
   const pipeline = body.pipelineId
     ? await prisma.pipeline.findUnique({ where: { id: BigInt(body.pipelineId) } })
@@ -403,6 +424,7 @@ dealsRoutes.post('/', zValidator('json', dealBody), async (c) => {
       name: body.name,
       accountId: body.accountId ? BigInt(body.accountId) : null,
       primaryContactId: body.primaryContactId ? BigInt(body.primaryContactId) : null,
+      leadId: body.leadId ? BigInt(body.leadId) : null,
       pipelineId: pipeline.id,
       stageId: stage.id,
       ownerId: BigInt(body.ownerId ?? user.userId),
@@ -422,6 +444,35 @@ dealsRoutes.post('/', zValidator('json', dealBody), async (c) => {
     where: { id: deal.id },
     data: { dealNumber: `DEAL-${String(deal.id).padStart(6, '0')}` },
   })
+
+  if (productPicks?.length) {
+    const catalog = await prisma.product.findMany({
+      where: { id: { in: productPicks.map((p) => BigInt(p.productId)) } },
+    })
+    const byId = new Map(catalog.map((p) => [String(p.id), p]))
+    await prisma.dealProduct.createMany({
+      data: productPicks.flatMap((pick, i) => {
+        const p = byId.get(String(pick.productId))
+        if (!p) return []
+        const quantity = pick.quantity ?? 1
+        const taxPercent = p.taxPercent == null ? 18 : Number(p.taxPercent)
+        const unitPrice = Number(p.unitPrice ?? 0)
+        return [{
+          dealId: deal.id,
+          productId: p.id,
+          name: p.name,
+          sku: p.sku,
+          quantity,
+          unitPrice,
+          discountPercent: 0,
+          taxPercent,
+          total: lineTotal({ quantity, unitPrice, discountPercent: 0, taxPercent }),
+          sortOrder: i * 10,
+        }]
+      }),
+    })
+    await syncDealValue(deal.id)
+  }
 
   if (cf) await customFields.saveValues('deal', deal.id, cf)
 
@@ -445,7 +496,8 @@ dealsRoutes.post('/', zValidator('json', dealBody), async (c) => {
     })
   }
 
-  return c.json(serializeDeal({ ...deal, stage }), 201)
+  const lead = deal.leadId ? (await leadsByIds([deal.leadId])).get(String(deal.leadId)) : undefined
+  return c.json(serializeDeal({ ...deal, stage }, undefined, lead), 201)
 })
 
 dealsRoutes.patch('/:id', zValidator('json', dealBody.partial()), async (c) => {
@@ -466,6 +518,7 @@ dealsRoutes.patch('/:id', zValidator('json', dealBody.partial()), async (c) => {
       ...(body.primaryContactId !== undefined
         ? { primaryContactId: body.primaryContactId ? BigInt(body.primaryContactId) : null }
         : {}),
+      ...(body.leadId !== undefined ? { leadId: body.leadId ? BigInt(body.leadId) : null } : {}),
       ...(body.ownerId !== undefined ? { ownerId: body.ownerId ? BigInt(body.ownerId) : null } : {}),
       ...(body.value !== undefined ? { value: body.value } : {}),
       ...(body.currency !== undefined ? { currency: body.currency } : {}),
@@ -573,9 +626,35 @@ dealsRoutes.post(
       })
     }
 
+    if (stage.isLost && deal.leadId) {
+      await markLeadBySlug(deal.leadId, 'lost', BigInt(user.userId), `Deal lost: ${deal.name}`)
+    }
+
     return c.json(serializeDeal(updated))
   },
 )
+
+dealsRoutes.post('/:id/place-order', async (c) => {
+  const id = BigInt(c.req.param('id'))
+  const user = c.get('user')
+  try {
+    const result = await placeOrderFromDeal({ dealId: id, actorId: BigInt(user.userId) })
+    return c.json(
+      {
+        orderId: Number(result.orderId),
+        orderNumber: result.orderNumber,
+        invoiceId: result.invoiceId ? Number(result.invoiceId) : null,
+        invoiceNumber: result.invoiceNumber ?? null,
+      },
+      201,
+    )
+  } catch (err) {
+    if (err instanceof PlaceOrderError) {
+      return c.json({ error: err.message, ...err.extra }, err.status as 400)
+    }
+    throw err
+  }
+})
 
 dealsRoutes.delete('/:id', adminOnly, async (c) => {
   const id = BigInt(c.req.param('id'))

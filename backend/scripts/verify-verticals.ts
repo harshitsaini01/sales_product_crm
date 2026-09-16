@@ -89,7 +89,7 @@ ok('product_sales turns location on', productFeatures.location_tracking === true
 ok('product_sales seed has Catalog Sent', product.seed.lifecycle.some((s) => s.slug === 'catalog-sent'))
 ok('product_sales seed has Confirmed', product.seed.lifecycle.some((s) => s.slug === 'confirmed'))
 ok('product_sales seed has no Quote Sent', !product.seed.lifecycle.some((s) => s.slug === 'quote-sent'))
-ok('product_sales seed has no pipelines', !(product.seed.pipelines && product.seed.pipelines.length > 0))
+ok('product_sales seed has Product Sales pipeline', !!(product.seed.pipelines && product.seed.pipelines.some((p) => p.name === 'Product Sales')))
 
 // ── Sanitising refuses what it must.
 const hostile = sanitizeLeadFieldConfig({

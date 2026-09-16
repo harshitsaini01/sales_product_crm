@@ -23,9 +23,14 @@ export type ChainKind = 'deal' | 'quote' | 'contract' | 'order' | 'invoice'
 
 export function ChainBar({
   current,
+  hideNext,
+  simple,
 }: {
   /** Which document this page is. Resolves the family from it. */
   current: { kind: ChainKind; id: number }
+  hideNext?: boolean
+  /** Deal → Order → Invoice, skipping quotes and contracts. */
+  simple?: boolean
 }) {
   const ref = { [current.kind]: current.id } as Record<ChainKind, number>
   const { data: chain, isLoading } = useQuery({
@@ -42,10 +47,10 @@ export function ChainBar({
   }
   if (!chain) return null
 
-  return <ChainStrip chain={chain} current={current} />
+  return <ChainStrip chain={chain} current={current} hideNext={hideNext} simple={simple} />
 }
 
-export function ChainStrip({ chain, current, hideNext }: { chain: SalesChainData; current?: { kind: ChainKind; id: number }; hideNext?: boolean }) {
+export function ChainStrip({ chain, current, hideNext, simple }: { chain: SalesChainData; current?: { kind: ChainKind; id: number }; hideNext?: boolean; simple?: boolean }) {
   const t = chain.totals
   const paidUp = t.invoiced > 0 && t.outstanding <= 0
 
@@ -65,27 +70,31 @@ export function ChainStrip({ chain, current, hideNext }: { chain: SalesChainData
           empty={chain.account ? chain.account.name : 'No deal'}
           emptyTo={chain.account ? { to: '/app/accounts/$accountId', params: { accountId: String(chain.account.id) } } : undefined}
         />
-        <Sep />
-        <Node
-          icon={FileText}
-          label="Quote"
-          active={current?.kind === 'quote'}
-          amount={t.quoted ? compactMoney(t.quoted) : null}
-          items={chain.quotes.map((q) => ({ id: q.id, number: q.quoteNumber, status: q.expiredByDate ? 'expired' : q.status, to: '/app/quotes/$quoteId', param: 'quoteId' }))}
-          currentId={current?.kind === 'quote' ? current.id : undefined}
-          empty="Not quoted"
-        />
-        <Sep />
-        <Node
-          icon={FileSignature}
-          label="Contract"
-          active={current?.kind === 'contract'}
-          amount={t.contracted ? compactMoney(t.contracted) : null}
-          items={chain.contracts.map((c) => ({ id: c.id, number: c.contractNumber, status: c.status, to: '/app/contracts/$contractId', param: 'contractId' }))}
-          currentId={current?.kind === 'contract' ? current.id : undefined}
-          empty="No contract"
-          optional
-        />
+        {!simple && (
+          <>
+            <Sep />
+            <Node
+              icon={FileText}
+              label="Quote"
+              active={current?.kind === 'quote'}
+              amount={t.quoted ? compactMoney(t.quoted) : null}
+              items={chain.quotes.map((q) => ({ id: q.id, number: q.quoteNumber, status: q.expiredByDate ? 'expired' : q.status, to: '/app/quotes/$quoteId', param: 'quoteId' }))}
+              currentId={current?.kind === 'quote' ? current.id : undefined}
+              empty="Not quoted"
+            />
+            <Sep />
+            <Node
+              icon={FileSignature}
+              label="Contract"
+              active={current?.kind === 'contract'}
+              amount={t.contracted ? compactMoney(t.contracted) : null}
+              items={chain.contracts.map((c) => ({ id: c.id, number: c.contractNumber, status: c.status, to: '/app/contracts/$contractId', param: 'contractId' }))}
+              currentId={current?.kind === 'contract' ? current.id : undefined}
+              empty="No contract"
+              optional
+            />
+          </>
+        )}
         <Sep />
         <Node
           icon={Package2}

@@ -34,14 +34,14 @@ export function AnnouncementsWidget() {
   const unreadCount = announcements.filter((a) => !a.readByMe).length
 
   return (
-    <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b flex items-center justify-between bg-gradient-to-r from-amber-50 to-transparent">
+    <div className="surface overflow-hidden">
+      <div className="px-5 py-4 border-b flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600">
             <Megaphone className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="font-bold text-sm">Announcements</h2>
+            <h2 className="font-semibold text-sm text-slate-800">Announcements</h2>
             <p className="text-[11px] text-muted-foreground">
               {unreadCount > 0
                 ? `${unreadCount} unread of ${announcements.length}`

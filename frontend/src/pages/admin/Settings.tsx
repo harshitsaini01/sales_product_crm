@@ -17,6 +17,12 @@ export default function Settings() {
   })
 
   const [pageLimit, setPageLimit] = useState('100')
+  const [companyName, setCompanyName] = useState('')
+  const [companyEmail, setCompanyEmail] = useState('')
+  const [companyPhone, setCompanyPhone] = useState('')
+  const [companyGstin, setCompanyGstin] = useState('')
+  const [companyAddress, setCompanyAddress] = useState('')
+  const [companyState, setCompanyState] = useState('')
 
   // Inactivity tracker state — synced from server on first load.
   const [inactivityEnabled, setInactivityEnabled] = useState(true)
@@ -25,7 +31,14 @@ export default function Settings() {
   const [halfdayMin, setHalfdayMin] = useState('15')
 
   useEffect(() => {
-    if (data?.page_limit) setPageLimit(String(data.page_limit))
+    if (!data) return
+    if (data.page_limit) setPageLimit(String(data.page_limit))
+    setCompanyName(data.company_name ?? '')
+    setCompanyEmail(data.company_email ?? '')
+    setCompanyPhone(data.company_phone ?? '')
+    setCompanyGstin(data.company_gstin ?? '')
+    setCompanyAddress(data.company_address ?? '')
+    setCompanyState(data.company_state ?? '')
   }, [data])
 
   useEffect(() => {
@@ -45,6 +58,26 @@ export default function Settings() {
     onError: (e: unknown) => {
       const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
       toast.error(msg || 'Failed to save')
+    },
+  })
+
+  const saveLetterhead = useMutation({
+    mutationFn: () =>
+      settingsApi.setLetterhead({
+        company_name: companyName,
+        company_email: companyEmail,
+        company_phone: companyPhone,
+        company_gstin: companyGstin,
+        company_address: companyAddress,
+        company_state: companyState,
+      }),
+    onSuccess: () => {
+      toast.success('Invoice letterhead saved')
+      qc.invalidateQueries({ queryKey: ['settings'] })
+    },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      toast.error(msg || 'Failed to save letterhead')
     },
   })
 
@@ -124,6 +157,32 @@ export default function Settings() {
               />
               <p className="text-xs text-gray-500 mt-1">Number of rows to display by default in data tables (10–500)</p>
             </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Invoice letterhead</h2>
+            <p className="text-sm text-gray-500">Printed on GST invoices as the seller</p>
+          </div>
+          <div className="space-y-3">
+            <input className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none" placeholder="Company name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
+            <input className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none" placeholder="GSTIN" value={companyGstin} onChange={(e) => setCompanyGstin(e.target.value)} />
+            <input className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none" placeholder="Legal address" value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <input className="px-4 py-2 border border-gray-200 rounded-xl outline-none" placeholder="State" value={companyState} onChange={(e) => setCompanyState(e.target.value)} />
+              <input className="px-4 py-2 border border-gray-200 rounded-xl outline-none" placeholder="Email" value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} />
+              <input className="px-4 py-2 border border-gray-200 rounded-xl outline-none" placeholder="Phone" value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} />
+            </div>
+            <button
+              type="button"
+              onClick={() => saveLetterhead.mutate()}
+              disabled={saveLetterhead.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-xl text-sm font-medium disabled:opacity-50"
+            >
+              {saveLetterhead.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save letterhead
+            </button>
           </div>
         </div>
 

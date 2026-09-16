@@ -44,9 +44,9 @@ export function PendingFollowupsWidget() {
   const leads: PendingLead[] = (leadsRes?.data ?? []) as PendingLead[]
 
   return (
-    <div className="bg-card border rounded-xl shadow-sm">
+    <div className="surface">
       <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b">
-        <h2 className="text-lg font-bold">Pending Follow-ups</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Pending Follow-ups</h2>
         <Link
           to="/app/leads"
           search={{ followupDate: new Date().toISOString().slice(0, 10) } as Record<string, string>}

@@ -22,6 +22,7 @@ const input = 'w-full rounded-lg border bg-background px-3 py-2 text-sm'
 
 export default function Invoices() {
   const qc = useQueryClient()
+  const hasAccounts = useAuthStore((s) => s.hasFeature('accounts'))
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
   const [creating, setCreating] = useState(false)
@@ -41,12 +42,14 @@ export default function Invoices() {
           <h1 className="text-2xl font-bold">Invoices</h1>
           <p className="text-sm text-muted-foreground">{data?.total ?? 0} total</p>
         </div>
+        {hasAccounts && (
         <button
           onClick={() => setCreating(true)}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" /> New invoice
         </button>
+        )}
       </div>
 
       {/* Ageing. The buckets are the whole reason a finance person opens this
@@ -120,7 +123,7 @@ export default function Invoices() {
                   <StatusPill status={inv.status} overdue={inv.overdue} />
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {inv.account?.name ?? 'No account'}
+                  {inv.lead?.name ?? inv.account?.name ?? 'No customer'}
                   {inv.dueDate && ` · due ${new Date(inv.dueDate).toLocaleDateString('en-IN')}`}
                 </p>
               </div>
@@ -139,7 +142,7 @@ export default function Invoices() {
         <Pager page={page} totalPages={data?.totalPages ?? 1} onChange={setPage} />
       )}
 
-      {creating && (
+      {creating && hasAccounts && (
         <NewInvoiceModal
           onClose={() => setCreating(false)}
           onCreated={() => {
@@ -301,7 +304,7 @@ export function InvoiceDetail() {
         <ArrowLeft className="h-4 w-4" /> All invoices
       </Link>
 
-      <ChainBar current={{ kind: 'invoice', id }} />
+      <ChainBar current={{ kind: 'invoice', id }} simple hideNext />
 
       <div className="rounded-xl border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -311,7 +314,7 @@ export function InvoiceDetail() {
               <StatusPill status={invoice.status} overdue={invoice.overdue} />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              {invoice.account?.name ?? 'No account'}
+              {invoice.lead?.name ?? invoice.account?.name ?? 'No customer'}
               {invoice.account?.gstin && ` · GSTIN ${invoice.account.gstin}`}
             </p>
             <p className="mt-0.5 flex flex-wrap gap-x-3 text-sm text-muted-foreground">
@@ -320,12 +323,6 @@ export function InvoiceDetail() {
               {invoice.dueDate && <span>due {new Date(invoice.dueDate).toLocaleDateString('en-IN')}</span>}
               {invoice.order && (
                 <Link to="/app/orders/$orderId" params={{ orderId: String(invoice.order.id) }} className="hover:text-primary">order {invoice.order.orderNumber}</Link>
-              )}
-              {invoice.contract && (
-                <Link to="/app/contracts/$contractId" params={{ contractId: String(invoice.contract.id) }} className="hover:text-primary">contract {invoice.contract.contractNumber}</Link>
-              )}
-              {invoice.quote && (
-                <Link to="/app/quotes/$quoteId" params={{ quoteId: String(invoice.quote.id) }} className="hover:text-primary">quote {invoice.quote.quoteNumber}</Link>
               )}
               {invoice.deal && (
                 <Link to="/app/deals/$dealId" params={{ dealId: String(invoice.deal.id) }} className="hover:text-primary">deal {invoice.deal.name}</Link>
@@ -448,7 +445,7 @@ export function InvoiceDetail() {
           kind="invoice"
           id={id}
           number={invoice.invoiceNumber}
-          defaultTo={invoice.account?.email}
+          defaultTo={invoice.lead?.email || invoice.account?.email}
           defaultSubject={`Invoice ${invoice.invoiceNumber}`}
           warning={!invoice.items?.length ? 'This invoice has no line items — there is nothing to bill.' : null}
           onClose={() => setSending(false)}

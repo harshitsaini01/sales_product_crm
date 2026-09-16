@@ -132,6 +132,8 @@ export interface Order extends DocTotals {
   contact?: { id: number; name: string; email: string | null } | null
   invoices?: { id: number; invoiceNumber: string; status: string; total: number; amountPaid?: number; balance?: number; overdue?: boolean; dueDate?: string | null }[]
   shipments?: { id: number; shipmentNumber: string; status: string; trackingNumber: string | null; items?: { name: string; quantity: number }[] }[]
+  leadId?: number | null
+  lead?: CrmRef | null
   _count?: { items: number; invoices: number }
 }
 
@@ -173,6 +175,8 @@ export interface Invoice extends DocTotals {
   deal?: { id: number; name: string; dealNumber: string | null } | null
   quote?: { id: number; quoteNumber: string; status: string } | null
   contract?: { id: number; contractNumber: string; title: string; status: string } | null
+  leadId?: number | null
+  lead?: (CrmRef & { email?: string | null; mobile?: string | null }) | null
 }
 
 // ─── The chain ────────────────────────────────────────────────────────────────

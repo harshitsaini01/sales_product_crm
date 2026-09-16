@@ -6,11 +6,7 @@ import {
   ArrowLeft, Building2, Save, Plus, Trash2, Package, Trophy, XCircle, Clock, CalendarDays,
   User, Phone, Mail, ExternalLink, History, FolderKanban, AlertTriangle, ArrowRight,
 } from 'lucide-react'
-import {
-  dealsApi, pipelinesApi, productsApi, formatMoney, compactMoney,
-  type Deal, type DealProduct,
-} from '@/lib/deals-api'
-import { quotesApi } from '@/lib/sales-api'
+import { formatMoney, compactMoney, dealsApi, pipelinesApi, productsApi, type Deal, type DealProduct } from '@/lib/deals-api'
 import { contactsApi } from '@/lib/crm-api'
 import { usersApi } from '@/lib/api'
 import { projectsApi } from '@/lib/projects-api'
@@ -19,7 +15,6 @@ import { DeleteButton } from '@/components/crm/DeleteButton'
 import { ActivityTimeline } from '@/components/crm/ActivityTimeline'
 import { CustomFieldsPanel } from '@/components/crm/CustomFieldsPanel'
 import { LostDealModal } from '@/components/crm/LostDealModal'
-import { SalesChain } from '@/components/crm/SalesChain'
 import { ChainBar } from '@/components/crm/ChainBar'
 import { StatusBadge as ProjectStatusBadge } from '@/components/projects/bits'
 import { NewProjectModal } from '@/components/projects/NewProjectModal'
@@ -48,6 +43,7 @@ export default function DealDetail() {
   const hasFeature = useAuthStore((st) => st.hasFeature)
   const [tab, setTab] = useState<Tab>('overview')
   const [losing, setLosing] = useState(false)
+  const [winning, setWinning] = useState(false)
 
   const { data: deal, isLoading } = useQuery({ queryKey: ['deals', id], queryFn: () => dealsApi.get(id) })
   const { data: pipelines = [] } = useQuery({ queryKey: ['pipelines'], queryFn: pipelinesApi.list })
@@ -62,21 +58,22 @@ export default function DealDetail() {
     onSuccess: (d) => {
       setLosing(false)
       refresh()
-      if (d.stage?.isWon) toast.success('Won! Now raise the order and invoice from the sales chain.')
+      if (d.stage?.isWon) toast.success('Won — place the order to raise the invoice.')
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (e: any) => toast.error(e?.response?.data?.error || 'Could not move'),
   })
 
-  const newQuote = useMutation({
-    mutationFn: () =>
-      quotesApi.create({ dealId: id, accountId: deal?.accountId, contactId: deal?.primaryContactId, copyFromDealId: id }),
-    onSuccess: (q) => {
-      toast.success(`${q.quoteNumber} created${deal?.products?.length ? ' from the deal line items' : ''}`)
-      navigate({ to: '/app/quotes/$quoteId', params: { quoteId: String(q.id) } })
+  const placeOrder = useMutation({
+    mutationFn: () => dealsApi.placeOrder(id),
+    onSuccess: (r) => {
+      toast.success(`Order ${r.orderNumber} placed${r.invoiceNumber ? ` · ${r.invoiceNumber}` : ''}`)
+      setWinning(false)
+      refresh()
+      navigate({ to: '/app/orders/$orderId', params: { orderId: String(r.orderId) } })
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (e: any) => toast.error(e?.response?.data?.error || 'Could not create a quote'),
+    onError: (e: any) => toast.error(e?.response?.data?.error || 'Could not place the order'),
   })
 
   if (isLoading) return <p className="py-12 text-center text-sm text-muted-foreground">Loading…</p>
@@ -92,7 +89,7 @@ export default function DealDetail() {
   const tabs: { key: Tab; label: string; show?: boolean }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'products', label: `Line items${deal.products?.length ? ` · ${deal.products.length}` : ''}` },
-    { key: 'sales', label: 'Quotes & billing', show: hasFeature('sales_docs') },
+    { key: 'sales', label: 'Order & invoice', show: hasFeature('sales_docs') },
     { key: 'projects', label: 'Projects', show: hasFeature('projects') },
     { key: 'notes', label: 'Notes' },
     { key: 'fields', label: 'Custom fields', show: hasFeature('custom_fields') },
@@ -186,7 +183,7 @@ export default function DealDetail() {
           <span className="mx-1 hidden text-muted-foreground sm:inline"><ArrowRight className="h-3.5 w-3.5" /></span>
           {wonStage && (
             <button
-              onClick={() => !deal.stage?.isWon && move.mutate({ stageId: wonStage.id })}
+              onClick={() => !deal.stage?.isWon && setWinning(true)}
               disabled={move.isPending || deal.stage?.isWon}
               className={cn('inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors', deal.stage?.isWon ? 'bg-emerald-600 text-white' : 'border border-emerald-300 text-emerald-700 hover:bg-emerald-50')}
             >
@@ -223,11 +220,13 @@ export default function DealDetail() {
           next action — the same bar every document page carries. */}
       {hasFeature('sales_docs') && (
         <div className="space-y-2">
-          <ChainBar current={{ kind: 'deal', id }} />
-          <div className="flex justify-end">
-            <button onClick={() => newQuote.mutate()} disabled={newQuote.isPending} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50">
-              <Plus className="h-3.5 w-3.5" /> New quote{deal.products?.length ? ' from line items' : ''}
-            </button>
+          <ChainBar current={{ kind: 'deal', id }} simple hideNext />
+          <div className="flex justify-end gap-2">
+            {!(deal.chain?.orders ?? []).length && (
+              <button onClick={() => setWinning(true)} disabled={placeOrder.isPending || !(deal.products?.length)} title={!deal.products?.length ? 'Add products first' : undefined} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
+                <Plus className="h-3.5 w-3.5" /> Place order
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -252,8 +251,22 @@ export default function DealDetail() {
           {tab === 'overview' && <OverviewTab deal={deal} onSaved={refresh} />}
           {tab === 'products' && <ProductsTab deal={deal} onSaved={refresh} />}
           {tab === 'sales' && deal.chain && (
-            <div className="rounded-xl border bg-card p-4">
-              <SalesChain chain={deal.chain} onNewQuote={() => newQuote.mutate()} onChanged={refresh} />
+            <div className="space-y-3 rounded-xl border bg-card p-4">
+              {!deal.chain.orders.length && !deal.chain.invoices.length && (
+                <p className="text-sm text-muted-foreground">No order yet. Add products, then place the order.</p>
+              )}
+              {deal.chain.orders.map((o) => (
+                <Link key={o.id} to="/app/orders/$orderId" params={{ orderId: String(o.id) }} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-accent">
+                  <span className="font-mono font-medium">{o.orderNumber}</span>
+                  <span className="text-muted-foreground">{o.status.replace(/_/g, ' ')} · {formatMoney(o.total)}</span>
+                </Link>
+              ))}
+              {deal.chain.invoices.map((i) => (
+                <Link key={i.id} to="/app/invoices/$invoiceId" params={{ invoiceId: String(i.id) }} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-accent">
+                  <span className="font-mono font-medium">{i.invoiceNumber}</span>
+                  <span className="text-muted-foreground">{i.status} · {formatMoney(i.total)}</span>
+                </Link>
+              ))}
             </div>
           )}
           {tab === 'projects' && <ProjectsTab deal={deal} />}
@@ -306,6 +319,27 @@ export default function DealDetail() {
           onCancel={() => setLosing(false)}
           onConfirm={(lostReasonId, lostNotes) => move.mutate({ stageId: lostStage.id, lost: { lostReasonId, lostNotes } })}
         />
+      )}
+      {winning && wonStage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !placeOrder.isPending && !move.isPending && setWinning(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold">Place the order?</h2>
+            <p className="mt-2 text-sm text-muted-foreground">This marks the deal won and raises an order plus invoice from the line items.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button disabled={placeOrder.isPending || move.isPending} onClick={() => setWinning(false)} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent">Cancel</button>
+              <button
+                disabled={placeOrder.isPending || move.isPending || !(deal.products?.length)}
+                onClick={async () => {
+                  if (!deal.stage?.isWon) await move.mutateAsync({ stageId: wonStage.id })
+                  placeOrder.mutate()
+                }}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {placeOrder.isPending || move.isPending ? 'Placing…' : 'Won + place order'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

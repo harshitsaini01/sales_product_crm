@@ -182,6 +182,11 @@ export const dealsApi = {
     api.patch(`/deals/${dealId}/products/${lineId}`, body).then((r) => r.data as DealProduct),
   removeLine: (dealId: number, lineId: number) =>
     api.delete(`/deals/${dealId}/products/${lineId}`).then((r) => r.data),
+  placeOrder: (id: number) =>
+    api.post(`/deals/${id}/place-order`).then(
+      (r) =>
+        r.data as { orderId: number; orderNumber: string; invoiceId: number | null; invoiceNumber: string | null },
+    ),
 }
 
 export const pipelinesApi = {
@@ -211,6 +216,7 @@ export const productsApi = {
     api.patch(`/products/${id}`, body).then((r) => r.data as Product),
   /** Retires rather than deletes — deal lines keep their copied name and price. */
   retire: (id: number) => api.delete(`/products/${id}`).then((r) => r.data),
+  remove: (id: number) => api.delete(`/products/${id}/permanent`).then((r) => r.data),
   uploadImage: (id: number, file: File) => {
     const fd = new FormData()
     fd.append('image', file)

@@ -34,10 +34,10 @@ export function CallStatsWidget() {
   }
 
   return (
-    <div className="bg-card border rounded-xl p-5 shadow-sm">
+    <div className="surface p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-bold flex items-center gap-2">
-          <PhoneCall className="h-4 w-4 text-indigo-600" />
+        <h2 className="text-base font-semibold flex items-center gap-2 text-slate-800">
+          <PhoneCall className="h-4 w-4 text-primary" />
           {isAdmin() ? 'Team calls today' : 'My calls today'}
         </h2>
         <Link to="/app/calls" className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">

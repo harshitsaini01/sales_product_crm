@@ -15,6 +15,7 @@ import {
   Info, ChevronDown, FilterX, PhoneOutgoing, Radio, Inbox, History,
   Activity, MessageSquareQuote, ShieldCheck, MapPinned,
   Package,
+  Handshake, Receipt, ShoppingBag,
 } from 'lucide-react'
 
 interface NavItem {
@@ -56,6 +57,9 @@ const navSections: { title: string; items: NavItem[] }[] = [
       { to: '/app/lead-config', label: '{lead} Workflow', icon: Sliders, roles: ['admin'], feature: 'lead_config' },
       { to: '/app/duplicates', label: 'Duplicates', icon: FileStack, roles: ['admin'], feature: 'duplicates' },
       { to: '/app/products', label: 'Products', icon: Package, feature: 'deals' },
+      { to: '/app/deals', label: 'Deals', icon: Handshake, feature: 'deals' },
+      { to: '/app/orders', label: 'Orders', icon: ShoppingBag, feature: 'sales_docs' },
+      { to: '/app/invoices', label: 'Invoices', icon: Receipt, feature: 'sales_docs' },
       { to: '/app/tasks', label: 'Tasks', icon: CheckSquare, feature: 'tasks' },
       { to: '/app/calls', label: 'Calls', icon: PhoneCall, feature: 'call_recording' },
       { to: '/app/remarks', label: 'Remarks', icon: MessageSquareQuote, feature: 'remarks' },
@@ -154,19 +158,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const sidebarContent = (
     <>
       {/* Logo */}
-      <div className="h-16 flex items-center justify-between px-6 border-b shrink-0">
-        <span className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-          {t('brand')}
-        </span>
+      <div className="h-16 flex items-center justify-between px-5 border-b border-sidebar-border shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Package className="h-4 w-4" />
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight text-sidebar-foreground truncate">
+            {t('brand')}
+          </span>
+        </div>
         {onClose && (
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-accent transition-colors lg:hidden">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors lg:hidden">
             <X className="h-5 w-5" />
           </button>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-6 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 p-3 space-y-5 overflow-y-auto custom-scrollbar">
         {navSections.map((section) => {
           const visibleItems = filterItems(section.items)
 
@@ -175,20 +184,20 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             if (!hasFeature('mobile_app')) return null
             return (
               <div key={section.title} className="space-y-1">
-                <h4 className="px-3 text-[10px] uppercase tracking-widest font-black text-muted-foreground/60 mb-2">
+                <h4 className="px-3 text-[10px] uppercase tracking-[0.16em] font-semibold text-sidebar-muted mb-2">
                   {section.title}
                 </h4>
                 <div className="space-y-1.5 px-1">
                   {/* Download card */}
                   {latestRelease?.id ? (
-                    <div className="rounded-xl border bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 p-3 space-y-2.5">
+                    <div className="rounded-xl border bg-muted/50 p-3 space-y-2.5">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-9 w-9 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-                          <Smartphone className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        <div className="h-9 w-9 rounded-lg bg-primary/15 flex items-center justify-center">
+                          <Smartphone className="h-5 w-5 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-foreground">{t('brand')}</p>
-                          <p className="text-[10px] text-muted-foreground">
+                          <p className="text-xs font-semibold text-sidebar-foreground">{t('brand')}</p>
+                          <p className="text-[10px] text-sidebar-muted">
                             v{latestRelease.versionName}
                             {latestRelease.sizeBytes && (
                               <> · {(latestRelease.sizeBytes / 1024 / 1024).toFixed(1)} MB</>
@@ -207,7 +216,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             toast.error('Download failed')
                           }
                         }}
-                        className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors shadow-sm"
+                        className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold transition-colors"
                       >
                         <Download className="h-3.5 w-3.5" />
                         Download APK
@@ -216,7 +225,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       {/* Installation steps toggle */}
                       <button
                         onClick={() => setShowInstallGuide((v) => !v)}
-                        className="flex items-center gap-1.5 w-full text-[10px] text-muted-foreground hover:text-foreground transition-colors pt-0.5"
+                        className="flex items-center gap-1.5 w-full text-[10px] text-sidebar-muted hover:text-sidebar-foreground transition-colors pt-0.5"
                       >
                         <Info className="h-3 w-3 shrink-0" />
                         <span className="font-medium">How to install?</span>
@@ -224,37 +233,37 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       </button>
 
                       {showInstallGuide && (
-                        <div className="text-[10px] leading-relaxed text-muted-foreground space-y-1.5 pt-1 border-t border-emerald-200/50 dark:border-emerald-800/30">
+                        <div className="text-[10px] leading-relaxed text-sidebar-muted space-y-1.5 pt-1 border-t border-sidebar-border">
                           <div className="flex gap-2">
-                            <span className="font-bold text-foreground shrink-0">1.</span>
+                            <span className="font-semibold text-sidebar-foreground shrink-0">1.</span>
                             <span>Open <strong>Settings → Apps → Special Access → Install Unknown Apps</strong> on your phone</span>
                           </div>
                           <div className="flex gap-2">
-                            <span className="font-bold text-foreground shrink-0">2.</span>
+                            <span className="font-semibold text-sidebar-foreground shrink-0">2.</span>
                             <span>Select <strong>Chrome</strong> (or your browser) and enable <strong>"Allow from this source"</strong></span>
                           </div>
                           <div className="flex gap-2">
-                            <span className="font-bold text-foreground shrink-0">3.</span>
+                            <span className="font-semibold text-sidebar-foreground shrink-0">3.</span>
                             <span>Click <strong>Download APK</strong> above using Chrome</span>
                           </div>
                           <div className="flex gap-2">
-                            <span className="font-bold text-foreground shrink-0">4.</span>
+                            <span className="font-semibold text-sidebar-foreground shrink-0">4.</span>
                             <span>Once downloaded, tap the notification or open <strong>Files → Downloads</strong></span>
                           </div>
                           <div className="flex gap-2">
-                            <span className="font-bold text-foreground shrink-0">5.</span>
+                            <span className="font-semibold text-sidebar-foreground shrink-0">5.</span>
                             <span>Tap the APK file and press <strong>Install</strong></span>
                           </div>
-                          <p className="text-muted-foreground/70 pt-1 italic">
+                          <p className="text-sidebar-muted/80 pt-1 italic">
                             On Samsung: Settings → Biometrics → Install unknown apps
                           </p>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="rounded-xl border bg-muted/30 p-3 flex items-center gap-2.5">
-                      <Smartphone className="h-5 w-5 text-muted-foreground/40" />
-                      <p className="text-xs text-muted-foreground/50">No app release available yet</p>
+                    <div className="rounded-xl border bg-muted/50 p-3 flex items-center gap-2.5">
+                      <Smartphone className="h-5 w-5 text-sidebar-muted/60" />
+                      <p className="text-xs text-sidebar-muted">No app release available yet</p>
                     </div>
                   )}
 
@@ -265,12 +274,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       to={item.to}
                       onClick={onClose}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group',
-                        'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                        '[&.active]:bg-primary/10 [&.active]:text-primary [&.active]:shadow-[inset_0_0_0_1px_rgba(var(--primary),0.1)]'
+                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group',
+                        'text-slate-500 hover:text-slate-800 hover:bg-slate-50',
+                        '[&.active]:bg-primary/10 [&.active]:text-primary [&.active]:hover:bg-primary/10 [&.active]:hover:text-primary'
                       )}
                     >
-                      <item.icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
+                      <item.icon className="h-4 w-4 shrink-0" />
                       {t.template(item.label)}
                     </Link>
                   ))}
@@ -282,7 +291,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           return (
             <div key={section.title} className="space-y-1">
-              <h4 className="px-3 text-[10px] uppercase tracking-widest font-black text-muted-foreground/60 mb-2">
+              <h4 className="px-3 text-[10px] uppercase tracking-[0.16em] font-semibold text-sidebar-muted mb-2">
                 {section.title}
               </h4>
               <div className="space-y-0.5">
@@ -292,12 +301,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     to={item.to}
                     onClick={onClose}
                     className={cn(
-                      'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group',
-                      'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                      '[&.active]:bg-primary/10 [&.active]:text-primary [&.active]:shadow-[inset_0_0_0_1px_rgba(var(--primary),0.1)]'
+                      'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group',
+                      'text-slate-500 hover:text-slate-800 hover:bg-slate-50',
+                      '[&.active]:bg-primary/10 [&.active]:text-primary [&.active]:hover:bg-primary/10 [&.active]:hover:text-primary'
                     )}
                   >
-                    <item.icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
+                    <item.icon className="h-4 w-4 shrink-0" />
                     {t.template(item.label)}
                   </Link>
                 ))}
@@ -309,16 +318,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* User info at bottom */}
       {user && (
-        <div className="p-4 border-t bg-muted/5 shrink-0">
+        <div className="p-4 border-t border-sidebar-border shrink-0">
           <div className="flex items-center gap-3 px-2 py-1">
-            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
+            <div className="w-8 h-8 rounded-full bg-primary/20 text-sidebar-foreground flex items-center justify-center text-xs font-semibold">
               {user.name.charAt(0)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-bold truncate text-foreground">{user.name}</div>
-              <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 leading-none mt-0.5 uppercase tracking-wider font-semibold">
+              <div className="text-sm font-semibold truncate text-sidebar-foreground">{user.name}</div>
+              <div className="text-[10px] text-sidebar-muted flex items-center gap-1.5 leading-none mt-0.5 uppercase tracking-wider font-medium">
                 <span className="truncate">{user.role}</span>
-                <span className="opacity-30">&bull;</span>
+                <span className="opacity-40">&bull;</span>
                 <span>{user.loginid}</span>
               </div>
             </div>
@@ -331,7 +340,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-64 bg-card border-r flex-col shrink-0">
+      <aside className="hidden lg:flex w-64 app-sidebar border-r border-sidebar-border flex-col shrink-0">
         {sidebarContent}
       </aside>
 
@@ -339,9 +348,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       {isOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+          <div className="absolute inset-0 bg-slate-400/25" onClick={onClose} />
           {/* Drawer */}
-          <aside className="absolute inset-y-0 left-0 w-72 bg-card border-r flex flex-col shadow-2xl">
+          <aside className="absolute inset-y-0 left-0 w-72 app-sidebar border-r border-sidebar-border flex flex-col shadow-2xl">
             {sidebarContent}
           </aside>
         </div>
