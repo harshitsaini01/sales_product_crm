@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { platformPrisma } from '../lib/platform'
-import { allFeaturesOn, resolveFeatures } from '../config/features'
+import { resolveFeatures } from '../config/features'
 import { getVertical } from '../config/verticals'
 import {
   TenantUnavailableError,
@@ -36,7 +36,7 @@ export function syntheticPrimary(): TenantContext {
     planExpiresAt: null,
     isPrimary: true,
     vertical: v.key,
-    features: resolveFeatures({ ...allFeaturesOn(), ...v.features }),
+    features: resolveFeatures(v.features),
     leadFields: v.leadFields,
     labels: v.labels,
     limits: {

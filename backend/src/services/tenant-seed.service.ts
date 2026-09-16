@@ -93,9 +93,38 @@ export async function seedTenantSchema(
         where: { departmentId, slug: stage.slug },
         select: { id: true },
       })
-      if (existing) continue
+      if (existing) {
+        await db.leadStatus.update({
+          where: { id: existing.id },
+          data: { title: stage.title, priority: stage.priority, status: 1 },
+        })
+        continue
+      }
       await db.leadStatus.create({ data: { ...stage, departmentId } })
       result.statuses++
+    }
+  }
+
+  if ((opts.vertical ?? 'product_sales') === 'product_sales') {
+    const keepSlugs = LIFECYCLE.map((s) => s.slug)
+    const keepDeptSlugs = DEPARTMENTS.map((d) => d.slug)
+    await db.leadStatus.updateMany({
+      where: { slug: { notIn: keepSlugs } },
+      data: { status: 0 },
+    })
+    await db.leadDepartment.updateMany({
+      where: { slug: { notIn: keepDeptSlugs } },
+      data: { status: 0 },
+    })
+    const sales = await db.leadDepartment.findFirst({
+      where: { slug: 'sales' },
+      select: { id: true },
+    })
+    if (sales) {
+      await db.lead.updateMany({
+        where: { OR: [{ departmentId: { not: sales.id } }, { departmentId: null }] },
+        data: { departmentId: sales.id },
+      })
     }
   }
 

@@ -18,6 +18,7 @@ import { QuickCallButton } from '@/components/leads/QuickCallButton'
 import { WhatsappSendModal } from '@/components/leads/WhatsappSendModal'
 import { PushToPhoneButton } from '@/components/leads/PushToPhoneButton'
 import { LeadOverview } from '@/components/leads/LeadOverview'
+import { SendCatalogPanel } from '@/components/leads/SendCatalogPanel'
 import { LeadDocumentsTab } from '@/components/leads/LeadDocumentsTab'
 import { RecordingPlayer } from '@/components/calls/RecordingPlayer'
 import { useLeadFields } from '@/hooks/useLeadFields'
@@ -141,6 +142,12 @@ export function LeadDetail() {
           </div>
         </div>
       </div>
+
+      <SendCatalogPanel
+        leadId={lead.id}
+        hasEmail={Boolean(lead.email)}
+        hasMobile={Boolean(lead.mobile)}
+      />
 
       {/* Tabs */}
       <div className="bg-card border rounded-lg overflow-hidden">

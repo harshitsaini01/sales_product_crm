@@ -172,6 +172,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           // For the 'App' section, also add a direct download button
           if (section.title === 'App') {
+            if (!hasFeature('mobile_app')) return null
             return (
               <div key={section.title} className="space-y-1">
                 <h4 className="px-3 text-[10px] uppercase tracking-widest font-black text-muted-foreground/60 mb-2">

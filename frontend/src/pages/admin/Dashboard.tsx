@@ -11,7 +11,6 @@ import { TodaysCallList } from '@/components/dashboard/TodaysCallList'
 import { CallStatsWidget } from '@/components/dashboard/CallStatsWidget'
 import { AssignedTodayWidget } from '@/components/dashboard/AssignedTodayWidget'
 import { AnnouncementsWidget } from '@/components/dashboard/AnnouncementsWidget'
-import { SalesPulse } from '@/components/dashboard/SalesPulse'
 
 // Helpers ─────────────────────────────────────────────────────────────────────
 function todayISO(offsetDays = 0): string {
@@ -219,10 +218,6 @@ export function Dashboard() {
           </Link>
         </div>
       </div>
-
-      {/* The B2B half: funnel, what is stuck, projects waiting on me. Renders
-          nothing for a customer without those modules. */}
-      <SalesPulse />
 
       {/* Stats Grid — every card is a deep-link to filtered leads */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -84,8 +84,12 @@ ok('product_sales says Sales Rep', resolveTerms(product.labels).counsellor.singu
 const productFeatures = resolveFeatures({ ...defaultFeatureMap(), ...product.features })
 ok('product_sales turns Students off', productFeatures.students === false)
 ok('product_sales turns deals on', productFeatures.deals === true)
-ok('product_sales turns location on', productFeatures.location_tracking === true)
+ok('product_sales turns accounts off', productFeatures.accounts === false)
+ok('product_sales turns location off', productFeatures.location_tracking === false)
 ok('product_sales seed has Catalog Sent', product.seed.lifecycle.some((s) => s.slug === 'catalog-sent'))
+ok('product_sales seed has Confirmed', product.seed.lifecycle.some((s) => s.slug === 'confirmed'))
+ok('product_sales seed has no Quote Sent', !product.seed.lifecycle.some((s) => s.slug === 'quote-sent'))
+ok('product_sales seed has no pipelines', !(product.seed.pipelines && product.seed.pipelines.length > 0))
 
 // ── Sanitising refuses what it must.
 const hostile = sanitizeLeadFieldConfig({

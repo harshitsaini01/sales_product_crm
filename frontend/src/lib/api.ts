@@ -438,6 +438,32 @@ export type FilterOptionsResponse = {
   maxLeadScore: number
 }
 
+export interface CatalogSendItem {
+  id: number
+  productId: number | null
+  name: string
+  description: string | null
+  unitPrice: number
+  imageUrl: string | null
+}
+
+export interface CatalogSend {
+  id: number
+  channel: 'email' | 'whatsapp'
+  note: string | null
+  createdAt: string
+  items: CatalogSendItem[]
+  sentBy?: { id: number; name: string } | null
+}
+
+export interface CatalogSendResult {
+  send: CatalogSend
+  channel: 'email' | 'whatsapp'
+  email?: { status: 'sent' | 'failed'; error?: string }
+  waUrl?: string
+  text?: string
+}
+
 export const leadsApi = {
   list: (params?: Record<string, string>) =>
     api.get('/leads', { params }).then((r) => r.data),
@@ -490,6 +516,10 @@ export const leadsApi = {
     api.post('/leads/bulk-restore', { leadIds }).then((r) => r.data),
   bulkPermanentDelete: (leadIds: number[]) =>
     api.post('/leads/bulk-permanent-delete', { leadIds }).then((r) => r.data),
+  sendCatalog: (id: number, data: { productIds: number[]; channel: 'email' | 'whatsapp'; note?: string }) =>
+    api.post(`/leads/${id}/send-catalog`, data).then((r) => r.data as CatalogSendResult),
+  catalogSends: (id: number) =>
+    api.get(`/leads/${id}/catalog-sends`).then((r) => r.data as CatalogSend[]),
   emptyTrash: () =>
     api.post('/leads/empty-trash').then((r) => r.data as { message: string; deleted: number }),
   fieldUpdate: (data: { field: string; oldValues: string[]; newValue: string; approvedLeadIds?: number[] }) =>

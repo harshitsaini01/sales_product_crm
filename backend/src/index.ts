@@ -7,13 +7,13 @@ import { serve } from '@hono/node-server'
 import { app } from './app'
 import { startRetentionCron } from './services/recording-retention.service'
 import { startCampaignEngine } from './services/campaign-engine.service'
-import { startInboxPoller } from './services/inbox-poller.service'
 import { startInactivityScheduler } from './services/inactivity-scheduler.service'
-import { startSalesDispatcher } from './services/crm/sales-events.service'
 import { startApiMetrics } from './services/api-metrics.service'
 import { captureUsageSnapshots } from './services/tenant-usage.service'
 import { getPrimaryTenant } from './services/tenant.service'
-import { disconnectAllTenants } from './lib/prisma'
+import { prisma, disconnectAllTenants } from './lib/prisma'
+import { runWithTenant } from './lib/tenant-context'
+import { seedTenantSchema } from './services/tenant-seed.service'
 
 const PORT = Number(process.env.PORT) || 3001
 
@@ -34,9 +34,7 @@ serve({ fetch: app.fetch, port: PORT }, (info) => {
 
   startRetentionCron()
   startCampaignEngine()
-  startInboxPoller()
   startInactivityScheduler()
-  startSalesDispatcher()
   startApiMetrics()
   startUsageSnapshots()
 
@@ -44,7 +42,17 @@ serve({ fetch: app.fetch, port: PORT }, (info) => {
   // knows about the original install. Failing loudly at boot beats every
   // request 500ing with a confusing "No primary tenant found".
   getPrimaryTenant()
-    .then((t) => console.log(`[crm] "${t.companyName}" · ${t.vertical} · schema ${t.schemaName}`))
+    .then(async (t) => {
+      console.log(`[crm] "${t.companyName}" · ${t.vertical} · schema ${t.schemaName}`)
+      const seeded = await runWithTenant(t, () =>
+        seedTenantSchema(prisma, { companyName: t.companyName, vertical: t.vertical }),
+      )
+      if (seeded.departments || seeded.statuses || seeded.leadTypes) {
+        console.log(
+          `[crm] pipeline ready · depts +${seeded.departments} · statuses +${seeded.statuses} · types +${seeded.leadTypes}`,
+        )
+      }
+    })
     .catch((err) => console.error('[crm] boot:', err.message))
 })
 

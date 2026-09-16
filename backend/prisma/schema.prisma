@@ -124,6 +124,7 @@ model User {
   bulkPresets             BulkPreset[]                @relation("BulkPresetOwner")
   counsellorRemarks       CounsellorRemark[]          @relation("CounsellorRemarks")
   createdRemarks          CounsellorRemark[]          @relation("CreatedRemarks")
+  catalogSends            LeadCatalogSend[]
   locationPoints          UserLocation[]
   deviceLocationStatus    UserDeviceLocationStatus?
   whatsappTemplates       WhatsappTemplate[]
@@ -417,6 +418,7 @@ model Lead {
   reminders          Reminder[]
   mailHistories      StudentMailHistory[]
   statusHistory      LeadStatusHistory[]
+  catalogSends       LeadCatalogSend[]
   callLogs           CallLog[]
   mobileCalls        MobileCall[]
   schoolHistory      StudentSchoolHistory[]
@@ -2598,17 +2600,52 @@ model Product {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  dealProducts   DealProduct[]
-  stockMovements StockMovement[]
-  kitComponents  ProductKitItem[]     @relation("KitParent")
-  kitParents     ProductKitItem[]     @relation("KitChild")
-  branchStock    ProductBranchStock[]
-  priceListItems PriceListItem[]
+  dealProducts      DealProduct[]
+  catalogSendItems  LeadCatalogSendItem[]
+  stockMovements    StockMovement[]
+  kitComponents     ProductKitItem[]     @relation("KitParent")
+  kitParents        ProductKitItem[]     @relation("KitChild")
+  branchStock       ProductBranchStock[]
+  priceListItems    PriceListItem[]
 
   @@index([active, name])
   @@index([category])
   @@index([collection])
   @@map("crm_products")
+}
+
+/// Products a sales rep actually sent a lead (email or WhatsApp). Snapshot
+/// name/price/photo so a later catalog edit does not rewrite history.
+model LeadCatalogSend {
+  id        BigInt   @id @default(autoincrement())
+  leadId    BigInt   @map("lead_id")
+  sentById  BigInt   @map("sent_by_id")
+  channel   String   @db.VarChar(20)
+  note      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lead   Lead                  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  sentBy User                  @relation(fields: [sentById], references: [id])
+  items  LeadCatalogSendItem[]
+
+  @@index([leadId, createdAt])
+  @@map("lead_catalog_sends")
+}
+
+model LeadCatalogSendItem {
+  id          BigInt   @id @default(autoincrement())
+  sendId      BigInt   @map("send_id")
+  productId   BigInt?  @map("product_id")
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  unitPrice   Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
+  imageUrl    String?  @map("image_url") @db.VarChar(1000)
+
+  send    LeadCatalogSend @relation(fields: [sendId], references: [id], onDelete: Cascade)
+  product Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([sendId])
+  @@map("lead_catalog_send_items")
 }
 
 /// One line on a deal.

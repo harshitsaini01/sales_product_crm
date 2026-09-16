@@ -19,6 +19,7 @@ import { applyFieldUpdate, isBulkUpdatableField } from '../services/leads/field-
 import { canMoveTo } from '../services/leads/pipeline.service'
 import { bumpLeadScore } from '../services/crm/sales-events.service'
 import { resolveStatusCascade } from '../services/leads/status-cascade.service'
+import { listLeadCatalogSends, sendLeadCatalog } from '../services/catalog-send.service'
 import { buildBulkStatusPlan } from '../services/leads/bulk-status-plan.service'
 import { uploadSingle } from '../middleware/upload'
 import { buildLeadPhoneIndex, normalizePhone } from '../utils/phone'
@@ -125,6 +126,20 @@ async function getArchiveDepartmentIds(): Promise<bigint[]> {
     select: { id: true },
   })
   return rows.map((r) => r.id)
+}
+
+async function fallbackDepartmentId(): Promise<bigint> {
+  const sales = await prisma.leadDepartment.findFirst({
+    where: { slug: 'sales', status: 1 },
+    select: { id: true },
+  })
+  if (sales) return sales.id
+  const any = await prisma.leadDepartment.findFirst({
+    where: { status: 1 },
+    orderBy: { priority: 'asc' },
+    select: { id: true },
+  })
+  return any?.id ?? BigInt(1)
 }
 
 // ─── Shared status → department / type cascade ────────────────────────────────
@@ -1446,11 +1461,18 @@ leadsRoutes.post('/', zValidator('json', createLeadSchema), async (c) => {
 
   normalizeLeadPhones(body as Record<string, any>)
 
+  const departmentId = body.departmentId ? BigInt(body.departmentId) : await fallbackDepartmentId()
+  const fresh = await prisma.leadStatus.findFirst({
+    where: { slug: 'new', status: 1, departmentId },
+    select: { id: true, title: true },
+  })
+
   const lead = await prisma.lead.create({
     data: {
       ...body,
       userId: BigInt(userId),
-      departmentId: body.departmentId ? BigInt(body.departmentId) : BigInt(2),
+      departmentId,
+      ...(fresh ? { leadStatusId: fresh.id, leadStatus: fresh.title } : {}),
     },
   })
 
@@ -1627,6 +1649,40 @@ leadsRoutes.post('/:id/wapp', async (c) => {
     await bumpLeadScore(id, 6, 'whatsapp replied')
   }
   return c.json(bigintFix({ wapp: updated.wapp }))
+})
+
+const sendCatalogSchema = z.object({
+  productIds: z.array(z.number().int().positive()).min(1).max(50),
+  channel: z.enum(['email', 'whatsapp']),
+  note: z.string().max(2000).optional(),
+})
+
+leadsRoutes.get('/:id/catalog-sends', async (c) => {
+  const raw = c.req.param('id')
+  if (!/^\d+$/.test(raw)) return c.json({ error: 'Not found' }, 404)
+  const rows = await listLeadCatalogSends(BigInt(raw))
+  return c.json(bigintFix(rows))
+})
+
+leadsRoutes.post('/:id/send-catalog', zValidator('json', sendCatalogSchema), async (c) => {
+  const raw = c.req.param('id')
+  if (!/^\d+$/.test(raw)) return c.json({ error: 'Not found' }, 404)
+  const user = c.get('user') as { userId: number }
+  const body = c.req.valid('json')
+  try {
+    const result = await sendLeadCatalog({
+      leadId: BigInt(raw),
+      userId: BigInt(user.userId),
+      productIds: body.productIds.map((id) => BigInt(id)),
+      channel: body.channel,
+      note: body.note,
+    })
+    return c.json(bigintFix(result))
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Could not send'
+    const status = /not found/i.test(msg) ? 404 : 400
+    return c.json({ error: msg }, status)
+  }
 })
 
 // POST /api/leads/:id/flag — toggle priority flag.

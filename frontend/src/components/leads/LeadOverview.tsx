@@ -12,7 +12,6 @@ import { StatusPill } from '@/components/crm/DocumentLines'
 import { Block, SectionHead, RecordRow, RecordList, EmptyNote } from '@/components/crm/panels'
 import { AccountSummary } from '@/components/crm/AccountSummary'
 import { ActivityTimeline } from '@/components/crm/ActivityTimeline'
-import { ConvertToAccountButton } from './ConvertToAccountButton'
 import { LeadProjects, CompanyPulse } from '@/components/projects/LeadProjects'
 import { SalesChain } from '@/components/crm/SalesChain'
 import { useAuthStore } from '@/stores/auth.store'
@@ -616,12 +615,6 @@ function CompanyForm({
               <Pencil className="h-3.5 w-3.5" />
             </button>
           )}
-          <ConvertToAccountButton
-            leadId={lead.id}
-            leadName={business?.companyName || lead.name || ''}
-            stayOnPage
-            onConverted={onSaved}
-          />
         </div>
       </div>
 
