@@ -24,7 +24,7 @@ export function SalesPulse() {
   const projects = hasFeature('projects')
 
   const { data: attn } = useQuery({ queryKey: ['sales-chain', 'attention'], queryFn: salesChainApi.attention, enabled: sales, refetchInterval: 120_000 })
-  const { data: forecast } = useQuery({ queryKey: ['deals', 'forecast', undefined], queryFn: () => dealsApi.forecast(), enabled: deals, retry: false })
+  const { data: forecast } = useQuery({ queryKey: ['deals', 'forecast', undefined], queryFn: () => dealsApi.forecast(), enabled: sales && deals, retry: false })
   const { data: waiting = [] } = useQuery({ queryKey: ['projects', 'waiting'], queryFn: projectsApi.waiting, enabled: projects, refetchInterval: 60_000 })
   const { data: summary } = useQuery({ queryKey: ['projects', 'summary'], queryFn: projectsApi.summary, enabled: projects })
 

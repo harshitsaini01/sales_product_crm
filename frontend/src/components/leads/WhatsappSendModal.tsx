@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { whatsappTemplatesApi } from '@/lib/api'
+import { productsApi, formatMoney, type Product } from '@/lib/deals-api'
 import { toast } from 'sonner'
 import { MessageSquare, X, Send, Paperclip, FileText, Download } from 'lucide-react'
 
@@ -182,6 +183,10 @@ export function WhatsappSendModal({ isOpen, onClose, lead, onSent }: WhatsappSen
               </span>
             </div>
 
+            <WhatsappProductPicker
+              onPick={(line) => setMessageText((t) => (t ? `${t}\n\n${line}` : line))}
+            />
+
             <textarea
               rows={5}
               value={messageText}
@@ -271,6 +276,35 @@ export function WhatsappSendModal({ isOpen, onClose, lead, onSent }: WhatsappSen
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function WhatsappProductPicker({ onPick }: { onPick: (line: string) => void }) {
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ['products', 'mail-picker'],
+    queryFn: () => productsApi.list(),
+    staleTime: 60_000,
+  })
+  if (!products.length) return null
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {products.map((p) => {
+        const line = [p.name, p.unitPrice != null ? formatMoney(p.unitPrice, p.currency) : '', p.description]
+          .filter(Boolean)
+          .join(' — ')
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onPick(line)}
+            className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs hover:bg-accent"
+          >
+            {p.imageUrl && <img src={p.imageUrl} alt="" className="h-6 w-6 rounded object-cover" />}
+            {p.name}
+          </button>
+        )
+      })}
     </div>
   )
 }

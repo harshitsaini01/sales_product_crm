@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { leadsApi, notesApi, commentsApi, remindersApi, communicationApi, callsApi, followupsApi } from '@/lib/api'
+import { productsApi, formatMoney, type Product } from '@/lib/deals-api'
 import { Flag, LayoutGrid, SlidersHorizontal } from 'lucide-react'
 import { formatDate, formatDateTime, maskPhone, normalizePhone } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
@@ -1056,6 +1057,9 @@ function EmailTab({ lead }: { lead: Lead }) {
       </div>
       <div>
         <label className="text-xs font-medium text-muted-foreground">Body</label>
+        <LeadProductPicker
+          onPick={(token) => setBody((b) => (b ? `${b}\n${token}` : token))}
+        />
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
@@ -1276,4 +1280,32 @@ function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60)
   const s = sec % 60
   return m > 0 ? `${m}m ${s}s` : `${s}s`
+}
+
+function LeadProductPicker({ onPick }: { onPick: (token: string) => void }) {
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ['products', 'mail-picker'],
+    queryFn: () => productsApi.list(),
+    staleTime: 60_000,
+  })
+  if (!products.length) {
+    return <p className="mt-1 text-xs text-muted-foreground">Add products under Products, then click one to drop it into this mail.</p>
+  }
+  return (
+    <div className="mt-1 mb-2 flex flex-wrap gap-1.5">
+      {products.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          onClick={() => onPick(`{{product:${p.sku || p.id}}}`)}
+          className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs hover:bg-accent"
+          title={p.description || p.name}
+        >
+          {p.imageUrl && <img src={p.imageUrl} alt="" className="h-6 w-6 rounded object-cover" />}
+          <span>{p.name}</span>
+          <span className="text-muted-foreground">{formatMoney(p.unitPrice, p.currency)}</span>
+        </button>
+      ))}
+    </div>
+  )
 }

@@ -294,23 +294,9 @@ export function LeadCard({
         </InfoCell>
         {lead.business?.companyName && (
           <InfoCell label="Company">
-            {lead.business.accountId ? (
-              <Link
-                to="/app/accounts/$accountId"
-                params={{ accountId: String(lead.business.accountId) }}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-primary hover:underline truncate block"
-                title={lead.business.companyName}
-              >
-                {lead.business.companyName}
-              </Link>
-            ) : (
-              // Recorded but not converted yet — a name, not a record to open.
-              <span className="font-semibold truncate block" title={lead.business.companyName}>
-                {lead.business.companyName}
-              </span>
-            )}
+            <span className="font-semibold truncate block" title={lead.business.companyName}>
+              {lead.business.companyName}
+            </span>
           </InfoCell>
         )}
         <InfoCell label="Mobile">
