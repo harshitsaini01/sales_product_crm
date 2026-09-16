@@ -1,0 +1,64 @@
+# ========================
+# Backend – Node.js / TypeScript / Prisma
+# ========================
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Credentials (FCM, SMTP keys, etc.)
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+*-service-account.json
+serviceAccount*.json
+
+# Prisma generated client (regenerated on postinstall)
+# prisma/client/  ← uncomment if you generate into a custom path
+
+# Uploads (user-uploaded files should not be committed)
+uploads/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript cache
+*.tsbuildinfo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.sw?
+
+# Test coverage
+coverage/
+
+# Misc scripts output
+all_tables.txt
+
+# Repair-script backups (scripts/repoint-calls-to-owned-lead.ts)
+backups/
+
+# Generated control-plane Prisma client
+prisma/platform/generated/
+.fingerprint.json
+prisma/repair/

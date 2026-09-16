@@ -1,0 +1,15 @@
+// The main tsconfig only includes `src/**/*`, so everything under `scripts/`
+// was invisible to `npm run build` — a script could reference a Prisma field
+// that does not exist and nothing would say so until it blew up at runtime,
+// halfway through writing data.
+//
+// `npm run typecheck:scripts` closes that gap. Separate from the build because
+// scripts are run with tsx and never compiled to dist/.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["scripts/**/*", "src/**/*"]
+}

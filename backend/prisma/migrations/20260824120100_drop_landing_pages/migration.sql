@@ -1,0 +1,16 @@
+-- Drop the Landing Pages feature.
+--
+-- Same story as tbl_program_fees: built end to end (page, sidebar entry, 4 REST
+-- endpoints under /api/settings, table) and never used. tbl_landingpage held 0
+-- rows in production and no foreign key pointed at it.
+--
+-- The `api_key` column looked load-bearing and is not. Inbound lead creation
+-- authenticates against `process.env.API_KEY` (src/routes/api.routes.ts) and the
+-- newer inbound route uses bcrypt-hashed keys in its own table — neither ever
+-- read this one. `landingPage` was referenced ONLY by its own settings CRUD, so
+-- nothing that accepts external leads is affected by this drop.
+--
+-- Lead source attribution is unaffected too: it lives on leads.website (63k rows
+-- carrying values like 'tutelagestudy', 'unibridgecrm', 'nksulead'), which has
+-- no relationship to this table.
+DROP TABLE IF EXISTS "tbl_landingpage";

@@ -1,0 +1,3497 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  admin
+  sub_admin  @map("sub-admin")
+  counsellor
+  franchise
+  employee
+  agent
+}
+
+enum LeadType {
+  new
+  greetings
+  neet_appearing  @map("neet-appearing")
+  neet_qualified  @map("neet-qualified")
+  qualified_leads @map("qualified-leads")
+  not_interested  @map("not-interested")
+  admission_drop  @map("admission-drop")
+  future_leads    @map("future-leads")
+  old_data        @map("old-data")
+}
+
+// ─── USERS ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                      BigInt    @id @default(autoincrement())
+  name                    String    @db.VarChar(100)
+  role                    String    @default("employee") @db.VarChar(100)
+  email                   String    @db.VarChar(100)
+  mobile                  String    @db.VarChar(100)
+  loginid                 String    @db.VarChar(100)
+  username                String    @db.VarChar(100)
+  password                String    @db.VarChar(250)
+  passwordCopy            String?   @map("password_copy") @db.VarChar(250) // Plain text copy (legacy)
+  nickName                String?   @map("nick_name") @db.VarChar(100)
+  automaticAsignLead      Int       @default(0) @map("automatic_asign_lead") @db.SmallInt // Auto-assign new leads
+  showFullPhone           Int       @default(0) @map("show_full_phone") @db.SmallInt // 1 = full phone numbers visible, 0 = masked
+  showBucket              Boolean   @default(true) @map("show_bucket") // shared lead bucket visible to this user
+  locationTrackingEnabled Boolean   @default(false) @map("location_tracking_enabled")
+  locationRequired        Boolean   @default(false) @map("location_required")
+  createdBy               BigInt?   @map("created_by") // Who created this user
+  status                  Int       @default(1) @db.SmallInt
+  branchId                BigInt?   @map("branch_id")
+  designation             String?   @db.VarChar(100)
+  gender                  String?   @db.VarChar(20)
+  dob                     DateTime? @db.Date
+  joiningDate             DateTime? @map("joining_date") @db.Date
+  salary                  BigInt?
+  address                 String?
+  city                    String?   @db.VarChar(50)
+  state                   String?   @db.VarChar(50)
+  country                 String?   @db.VarChar(50)
+  pincode                 String?   @db.VarChar(50)
+  imgpath                 String?   @db.VarChar(255) // Profile photo URL
+  newApplicant            Int       @default(0) @map("new_applicant") @db.SmallInt
+  activeWebSessionId      String?   @map("active_web_session_id") @db.VarChar(64)
+  activeMobileSessionId   String?   @map("active_mobile_session_id") @db.VarChar(64)
+  lastActivityAt          DateTime? @map("last_activity_at")
+  lastActivitySource      String?   @map("last_activity_source") @db.VarChar(20) // 'web' | 'mobile'
+  // Phone-call suppression: when the mobile app reports a call in progress, we
+  // stamp the start here. While non-null the inactivity scheduler skips raising
+  // events for this user — calls protect against false half-days.
+  onCallSince             DateTime? @map("on_call_since")
+  onCallUpdatedAt         DateTime? @map("on_call_updated_at") // last time the call state flipped
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  branch                  Branch?                     @relation(fields: [branchId], references: [id])
+  roles                   UserRole_[]
+  assignedLeads           AsignedLead[]               @relation("CounsellorLeads")
+  followups               LeadFollowup[]
+  loginDetails            LoginDetail[]
+  documents               UserDocument[]
+  tasks                   Task[]                      @relation("AssignedBy")
+  assignedTasks           Task[]                      @relation("AssignedTo")
+  createdLeadWorkBatches  LeadWorkBatch[]             @relation("LeadWorkBatchCreator")
+  assignedLeadWorkBatches LeadWorkBatch[]             @relation("LeadWorkBatchAssignee")
+  sentMails               SentMail[]
+  sentUniversityMails     UniversityApplicationMail[]
+  reminders               Reminder[]
+  announcements           Announcement[]              @relation("AnnouncementCreator")
+  announcementReads       AnnouncementRead[]
+  leaves                  EmployeeLeave[]
+  chatMessages            ChatMessage[]               @relation("ChatSender")
+  receivedMessages        ChatMessage[]               @relation("ChatRecipient")
+  invoices                Invoice[]
+  leadNotes               LeadNote[]
+  leadComments            LeadComment[]
+  // ── B2B core (crm_* tables). Relation fields only: no column is added to
+  //    `users` by any of these — the foreign key lives on the new table.
+  ownedAccounts           Account[]                   @relation("AccountOwner")
+  createdAccounts         Account[]                   @relation("AccountCreator")
+  ownedContacts           Contact[]                   @relation("ContactOwner")
+  activities              Activity[]                  @relation("ActivityActor")
+  crmNotes                CrmNote[]                   @relation("CrmNoteAuthor")
+  ownedDeals              Deal[]                      @relation("DealOwner")
+  createdDeals            Deal[]                      @relation("DealCreator")
+  ownedQuotes             Quote[]                     @relation("QuoteOwner")
+  ownedContracts          Contract[]                  @relation("ContractOwner")
+  ownedOrders             Order[]                     @relation("OrderOwner")
+  ownedCrmInvoices        CrmInvoice[]                @relation("CrmInvoiceOwner")
+  recordedCrmPayments     CrmPayment[]                @relation("CrmPaymentRecorder")
+  statusChanges           LeadStatusHistory[]
+  callLogs                CallLog[]
+  dailyReports            DailyReport[]
+  mobileCalls             MobileCall[]
+  deviceTokens            DeviceToken[]
+  appReleases             AppRelease[]
+  stagingBatches          LeadStagingBatchAssignee[]
+  branchAccess            UserBranchAccess[]
+  inactivityEvents        InactivityEvent[]
+  bulkOperations          BulkOperation[]             @relation("BulkOperationActor")
+  bulkPresets             BulkPreset[]                @relation("BulkPresetOwner")
+  counsellorRemarks       CounsellorRemark[]          @relation("CounsellorRemarks")
+  createdRemarks          CounsellorRemark[]          @relation("CreatedRemarks")
+  locationPoints          UserLocation[]
+  deviceLocationStatus    UserDeviceLocationStatus?
+  whatsappTemplates       WhatsappTemplate[]
+  // ── Projects & proposals (crm_* tables, gated by the `projects` module).
+  teamMemberships         CrmTeamMember[]             @relation("TeamMemberUser")
+  ownedProjects           CrmProject[]                @relation("ProjectOwner")
+  assignedProjects        CrmProject[]                @relation("ProjectAssignee")
+  createdProjects         CrmProject[]                @relation("ProjectCreator")
+  projectMessages         CrmProjectMessage[]         @relation("ProjectMessageAuthor")
+  projectFiles            CrmProjectFile[]            @relation("ProjectFileUploader")
+  stockMovements          StockMovement[]             @relation("StockMovementActor")
+  createdShipments        Shipment[]                  @relation("ShipmentCreator")
+  approvalDecisions       SalesApproval[]             @relation("ApprovalDecider")
+
+  @@map("users")
+}
+
+// Immutable, server-timestamped samples sent by the authenticated counsellor app.
+model UserLocation {
+  id         BigInt   @id @default(autoincrement())
+  userId     BigInt   @map("user_id")
+  latitude   Float
+  longitude  Float
+  accuracyM  Float?   @map("accuracy_m")
+  altitudeM  Float?   @map("altitude_m")
+  speedMps   Float?   @map("speed_mps")
+  bearingDeg Float?   @map("bearing_deg")
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, recordedAt])
+  @@map("user_locations")
+}
+
+// Last-known state of the four gate conditions the mobile app enforces
+// (LocationGate.isBlocked in the counsellor app) — reported by the device
+// itself on every check, not inferred from silence. This is what makes "GPS is
+// on but the app was never granted location permission" (or any other single
+// failing condition) visible on the admin dashboard instead of just showing up
+// as a generic stale/no-data counsellor.
+model UserDeviceLocationStatus {
+  userId               BigInt   @id @map("user_id")
+  permissionGranted    Boolean  @map("permission_granted")
+  backgroundGranted    Boolean  @map("background_granted")
+  gpsEnabled           Boolean  @map("gps_enabled")
+  batteryExempt        Boolean  @map("battery_exempt")
+  callPhoneGranted     Boolean  @default(true) @map("call_phone_granted")
+  phoneStateGranted    Boolean  @default(true) @map("phone_state_granted")
+  callLogGranted       Boolean  @default(true) @map("call_log_granted")
+  recordAudioGranted   Boolean  @default(true) @map("record_audio_granted")
+  notificationsGranted Boolean  @default(true) @map("notifications_granted")
+  blocked              Boolean
+  blockReason          String?  @map("block_reason") @db.VarChar(120)
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_device_location_status")
+}
+
+// Tracks counsellor inactivity windows. The scheduler raises a row whenever a
+// counsellor crosses a threshold (warning → alert → halfday) without any
+// activity; the popup is dismissed via /api/activity/ack which stamps ackAt.
+// `source` records where the inactivity was observed — always 'server' since
+// it's the cron that raises events; client just acks. Web + mobile activity
+// is unified on User.lastActivityAt so there is no double-counting.
+model InactivityEvent {
+  id              BigInt    @id @default(autoincrement())
+  userId          BigInt    @map("user_id")
+  kind            String    @db.VarChar(20) // 'warning' | 'alert' | 'halfday'
+  raisedAt        DateTime  @default(now()) @map("raised_at")
+  ackAt           DateTime? @map("ack_at")
+  // Free-text payload — minutes of inactivity at raise time, useful for audit.
+  inactiveSeconds Int       @map("inactive_seconds")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, raisedAt])
+  @@index([kind, raisedAt])
+  @@map("inactivity_events")
+}
+
+// Counsellor daily report — what was done today, follow-up plans, leads contacted, etc.
+// Replicates legacy Counsellor.addDailyReport / updateDailyReport.
+model DailyReport {
+  id             BigInt   @id @default(autoincrement())
+  userId         BigInt   @map("user_id")
+  reportDate     DateTime @map("report_date") @db.Date
+  leadsContacted Int      @default(0) @map("leads_contacted") @db.SmallInt
+  callsMade      Int      @default(0) @map("calls_made") @db.SmallInt
+  meetingsHeld   Int      @default(0) @map("meetings_held") @db.SmallInt
+  enrollments    Int      @default(0) @db.SmallInt
+  summary        String // What was accomplished
+  challenges     String? // Blockers / issues
+  tomorrowPlan   String?  @map("tomorrow_plan")
+  status         Int      @default(1) @db.SmallInt
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, reportDate], name: "daily_report_user_date_uk")
+  @@map("daily_reports")
+}
+
+model UserRole_ {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  role      String   @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_roles")
+}
+
+model LoginDetail {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  ip        String?  @db.VarChar(50)
+  browser   String?  @db.VarChar(100)
+  os        String?  @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("login_details")
+}
+
+// ─── LEADS ───────────────────────────────────────────────────────────────────
+
+model Lead {
+  id                      BigInt    @id @default(autoincrement())
+  // ── Personal Info ──────────────────────────────────────────
+  name                    String    @db.VarChar(100)
+  father                  String?   @db.VarChar(100) // Father's name
+  mother                  String?   @db.VarChar(100) // Mother's name
+  fatherMobile            String?   @map("father_mobile") @db.VarChar(20)
+  motherMobile            String?   @map("mother_mobile") @db.VarChar(20)
+  dob                     String?   @db.VarChar(100) // Date of birth
+  gender                  String?   @db.VarChar(10)
+  castCategory            String?   @map("cast_category") @db.VarChar(100) // Caste category
+  nationality             String?   @db.VarChar(50)
+  religion                String?   @db.VarChar(100)
+  passportNumber          String?   @map("passport_number") @db.VarChar(100)
+  firstLanguage           String?   @map("first_language") @db.VarChar(100)
+  maritalStatus           String?   @map("marital_status") @db.VarChar(50)
+  passportExpiry          String?   @map("passport_expiry") @db.VarChar(100)
+  imgpath                 String? // Profile photo URL
+  imgname                 String?   @db.VarChar(200) // Profile photo filename
+  // ── Contact Info ──────────────────────────────────────────
+  email                   String?   @db.VarChar(100) // Primary email
+  email2                  String?   @db.VarChar(100) // Secondary email
+  email3                  String?   @db.VarChar(100) // Tertiary email
+  mobile                  String?   @db.VarChar(50) // Primary mobile
+  mobile2                 String?   @db.VarChar(20) // Secondary mobile
+  mobile3                 String?   @db.VarChar(20) // Tertiary mobile
+  password                String?   @db.VarChar(100)
+  // ── Address ──────────────────────────────────────────────
+  city                    String?   @db.VarChar(100)
+  state                   String?   @db.VarChar(50)
+  country                 String?   @db.VarChar(100)
+  pincode                 String?   @db.VarChar(20)
+  homeAddress             String?   @map("home_address") @db.Text
+  homeContactNumber       String?   @map("home_contact_number") @db.VarChar(50)
+  // ── Academic ──────────────────────────────────────────────
+  intrestedCourse         String?   @map("intrested_course") @db.VarChar(100)
+  intrestedSubject        String?   @map("intrested_subject") @db.VarChar(100) // Interested subject
+  intrestedUniversity     String?   @map("intrested_university") @db.VarChar(50)
+  approximateBudget       String?   @map("approximate_budget") @db.VarChar(100) // Budget range
+  highestQualification    String?   @map("highest_qualification") @db.VarChar(100)
+  preferredDestination    String?   @map("preferred_destination") @db.VarChar(100)
+  persuingCountry         String?   @map("persuing_country") @db.VarChar(100)
+  englishExamType         String?   @map("english_exam_type") @db.VarChar(50)
+  overallScore            Int?      @map("overall_score")
+  neetscore               String?   @db.VarChar(20)
+  neetRank                String?   @map("neet_rank") @db.VarChar(100)
+  neetQualified           String?   @map("neet_qualified") @db.VarChar(100)
+  neetPassingYear         Int?      @map("neet_passing_year")
+  // ── Legacy Education & English Scores ─────────────────────
+  countryOfEducation      String?   @map("country_of_education") @db.VarChar(100)
+  highestLevelOfEducation String?   @map("highest_level_of_education") @db.VarChar(100)
+  gradingScheme           String?   @map("grading_scheme") @db.VarChar(100)
+  gradeAverage            String?   @map("grade_average") @db.VarChar(100)
+  studentType             String?   @map("student_type") @db.VarChar(100)
+  neetResult              String?   @map("neet_result") @db.VarChar(100)
+  dateOfExam              String?   @map("date_of_exam") @db.VarChar(100)
+  listeningScore          String?   @map("listening_score") @db.VarChar(50)
+  readingScore            String?   @map("reading_score") @db.VarChar(50)
+  writingScore            String?   @map("writing_score") @db.VarChar(50)
+  speakingScore           String?   @map("speaking_score") @db.VarChar(50)
+  // ── Legacy Education Qualifications ───────────────────────
+  hs                      String?   @db.VarChar(50)
+  hsSchoolName            String?   @map("hs_school_name") @db.VarChar(255)
+  hsPassingYear           String?   @map("hs_passing_year") @db.VarChar(20)
+  hsResult                String?   @map("hs_result") @db.VarChar(50)
+  intr                    String?   @db.VarChar(50)
+  intrSchoolName          String?   @map("intr_school_name") @db.VarChar(255)
+  intrPassingYear         String?   @map("intr_passing_year") @db.VarChar(20)
+  intrResult              String?   @map("intr_result") @db.VarChar(50)
+  ug                      String?   @db.VarChar(50)
+  ugSchoolName            String?   @map("ug_school_name") @db.VarChar(255)
+  ugPassingYear           String?   @map("ug_passing_year") @db.VarChar(20)
+  ugResult                String?   @map("ug_result") @db.VarChar(50)
+  // ── Legacy Exams (UCAT, DMAT, SAT) ────────────────────────
+  ucat                    Int?      @db.SmallInt
+  ucatExamDate            String?   @map("ucat_exam_date") @db.VarChar(50)
+  ucatVScore              String?   @map("ucat_v_score") @db.VarChar(50)
+  ucatVRank               String?   @map("ucat_v_rank") @db.VarChar(50)
+  ucatQScore              String?   @map("ucat_q_score") @db.VarChar(50)
+  ucatQRank               String?   @map("ucat_q_rank") @db.VarChar(50)
+  ucatWScore              String?   @map("ucat_w_score") @db.VarChar(50)
+  ucatWRank               String?   @map("ucat_w_rank") @db.VarChar(50)
+  dmat                    Int?      @db.SmallInt
+  dmatExamDate            String?   @map("dmat_exam_date") @db.VarChar(50)
+  dmatVScore              String?   @map("dmat_v_score") @db.VarChar(50)
+  dmatVRank               String?   @map("dmat_v_rank") @db.VarChar(50)
+  dmatQScore              String?   @map("dmat_q_score") @db.VarChar(50)
+  dmatQRank               String?   @map("dmat_q_rank") @db.VarChar(50)
+  dmatWScore              String?   @map("dmat_w_score") @db.VarChar(50)
+  dmatWRank               String?   @map("dmat_w_rank") @db.VarChar(50)
+  dmatIrScore             String?   @map("dmat_ir_score") @db.VarChar(50)
+  dmatIrRank              String?   @map("dmat_ir_rank") @db.VarChar(50)
+  dmatTotalScore          String?   @map("dmat_total_score") @db.VarChar(50)
+  dmatTotalRank           String?   @map("dmat_total_rank") @db.VarChar(50)
+  sat                     Int?      @db.SmallInt
+  satExamDate             String?   @map("sat_exam_date") @db.VarChar(50)
+  satReasoningPoints      String?   @map("sat_reasoning_points") @db.VarChar(50)
+  satSubjectPoints        String?   @map("sat_subject_points") @db.VarChar(50)
+  // ── Lead Tracking ─────────────────────────────────────────
+  leadType                String    @default("new") @map("lead_type") @db.VarChar(50)
+  leadStatus              String    @default("Fresh") @map("lead_status") @db.VarChar(100)
+  leadSubStatus           String?   @map("lead_sub_status") @db.VarChar(100)
+  leadStatusId            BigInt?   @map("lead_status_id")
+  leadSubStatusId         BigInt?   @map("lead_sub_status_id")
+  leadFollowStatus        BigInt?   @map("lead_follow_status")
+  departmentId            BigInt?   @default(2) @map("department_id")
+  statusLeadTypeId        BigInt?   @map("status_lead_type_id") // FK to lead_department_leadtypes
+  userId                  BigInt    @default(28) @map("userid")
+  event                   String?   @db.VarChar(50) // Source/event
+  source                  String?   @db.VarChar(100)
+  campaign                String?   @db.VarChar(255)
+  keyword                 String?   @db.VarChar(255)
+  sourceUrl               String?   @map("source_url")
+  website                 String    @default("other") @db.VarChar(100)
+  comment                 String?
+  // ── Engagement Tracking ───────────────────────────────────
+  called                  Int       @default(0) @db.SmallInt // Has been called (0/1)
+  wapp                    Int       @default(0) @db.SmallInt // WhatsApp contacted (0/1)
+  callAnsweredStatus      String?   @map("call_answered_status") @db.VarChar(50)
+  flagSend                Int       @default(0) @map("flag_send") @db.SmallInt // Admin flagged
+  flagRcv                 Int       @default(0) @map("flag_rcv") @db.SmallInt // Counsellor flagged
+  // ── Date Tracking ────────────────────────────────────────
+  followupDate            DateTime? @map("followup_date") @db.Date
+  commentDate             DateTime? @map("comment_date") @db.Date // Last comment date
+  reminderDate            DateTime? @map("reminder_date") @db.Date
+  // ── Financial ────────────────────────────────────────────
+  enrolled                Int?      @db.SmallInt
+  course                  String?   @db.VarChar(100)
+  totalFees               Int?      @map("total_fees")
+  totalDepositFees        Int?      @map("total_deposit_fees")
+  balanceFees             Int?      @map("balance_fees")
+  // ── System ───────────────────────────────────────────────
+  asign                   Int       @default(1) @db.SmallInt // Pending auto-assignment (1=pending, 0=done)
+  trash                   Int       @default(0) @db.SmallInt // Soft deleted
+  status                  Int?      @db.SmallInt
+  // Duplicate tracking — when same email/mobile submits the website form again,
+  // we insert a new row with isDuplicate=true + duplicateOfId pointing to the original.
+  isDuplicate             Boolean   @default(false) @map("is_duplicate")
+  duplicateOfId           BigInt?   @map("duplicate_of_id")
+  // Set when an admin explicitly unassigns the lead. Such leads stay in their
+  // own department and don't fall back into the shared `/bucket` pool. Cleared
+  // when the lead is assigned to a counsellor again.
+  bucketExcluded          Boolean   @default(false) @map("bucket_excluded")
+  // Lead score — increments +1 each time a call to this lead is picked up.
+  // Simple counter, no decay, no upper cap. Shown as a chip on the lead card.
+  leadScore               Int       @default(0) @map("lead_score")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  assignedTo         AsignedLead[]
+  workBatchItems     LeadWorkBatchItem[]
+  followups          LeadFollowup[]
+  notes              LeadNote[]
+  /// B2B extension. Optional, and absent for an education customer.
+  business           LeadBusiness?
+  comments           LeadComment[]
+  documents          StudentDocument[]
+  reminders          Reminder[]
+  mailHistories      StudentMailHistory[]
+  statusHistory      LeadStatusHistory[]
+  callLogs           CallLog[]
+  mobileCalls        MobileCall[]
+  schoolHistory      StudentSchoolHistory[]
+  examUcat           StudentExamUcat?
+  examDmat           StudentExamDmat?
+  examSat            StudentExamSat?
+  feedbacks          StudentFeedback[]
+  campaignRecipients EmailCampaignRecipient[]
+  inboundMails       InboundMail[]
+  universityMails    UniversityApplicationMail[]
+
+  // The task builder's cohort query and every dated Leads listing run
+  // `WHERE trash = 0 ORDER BY created_at DESC`. Without this the planner did a
+  // parallel seq scan plus an external merge sort that spilled to disk.
+  @@index([trash, createdAt])
+  // The notification bell asks "which leads are due or overdue for follow-up"
+  // every 60 s, once as a findMany-with-sort and once as a count. Unindexed,
+  // that was two seq scans of the whole table per poll.
+  @@index([trash, followupDate])
+  @@map("leads")
+}
+
+// ─── LEAD ASSIGNMENT ─────────────────────────────────────────────────────────
+
+model AsignedLead {
+  id                   BigInt   @id @default(autoincrement())
+  clrId                BigInt   @map("clr_id")
+  stdId                BigInt   @map("std_id")
+  leadType             String   @default("new") @map("lead_type") @db.VarChar(255)
+  leadStatusId         BigInt?  @map("lead_status_id")
+  leadSubStatusId      BigInt?  @map("lead_sub_status_id")
+  leadFollowUpStatusId BigInt?  @map("lead_follow_up_status_id")
+  callAnsweredStatus   Int?     @map("call_answered_status") @db.SmallInt
+  departmentId         BigInt?  @default(2) @map("department_id")
+  statusLeadTypeId     BigInt?  @map("status_lead_type_id")
+  called               Int      @default(0) @db.SmallInt
+  wapp                 Int      @default(0) @db.SmallInt
+  status               Int      @default(1) @db.SmallInt
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  counsellor User @relation("CounsellorLeads", fields: [clrId], references: [id])
+  lead       Lead @relation(fields: [stdId], references: [id])
+
+  // "Who owns this lead" (cohort snapshot) and "what does this counsellor hold"
+  // are the only two ways this table is ever read, and both filter on status = 1.
+  @@index([stdId, status])
+  @@index([clrId, status])
+  @@map("asigned_leads")
+}
+
+// ─── LEAD STATUS SYSTEM ───────────────────────────────────────────────────────
+
+model LeadStatus {
+  id           BigInt   @id @default(autoincrement())
+  title        String   @db.VarChar(100)
+  slug         String   @db.VarChar(100)
+  departmentId BigInt   @map("department_id")
+  moveTo       String?  @map("move_to") @db.VarChar(100)
+  priority     Int      @default(0)
+  status       Int      @default(1) @db.SmallInt // 1 = active, 0 = disabled (hidden from UI)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  subStatuses LeadSubStatus[]
+
+  @@map("lead_statuses")
+}
+
+model LeadSubStatus {
+  id               BigInt   @id @default(autoincrement())
+  statusId         BigInt   @map("status_id")
+  subStatus        String   @map("sub_status") @db.VarChar(100)
+  subStatusSlug    String   @map("sub_status_slug") @db.VarChar(100)
+  moveTo           BigInt?  @map("move_to")
+  departmentId     BigInt?  @map("department_id")
+  statusLeadTypeId BigInt?  @map("status_lead_type_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  status LeadStatus @relation(fields: [statusId], references: [id])
+
+  @@map("lead_sub_statuses")
+}
+
+model LeadTypeConfig {
+  id           BigInt   @id @default(autoincrement())
+  title        String   @db.VarChar(100)
+  slug         String   @db.VarChar(100)
+  departmentId BigInt?  @map("department_id")
+  priority     Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("lead_types")
+}
+
+model LeadDepartment {
+  id        BigInt   @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  slug      String   @db.VarChar(100)
+  priority  Int      @default(0)
+  status    Int      @default(1) @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("lead_departments")
+}
+
+model LeadFollowupStatus {
+  id        BigInt   @id @default(autoincrement())
+  status    String   @db.VarChar(100) // Old CRM field name: "status"
+  shortnote String?  @db.VarChar(200) // Old CRM field name: "shortnote"
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("lead_followup_statuses")
+}
+
+// ─── FOLLOWUPS & NOTES ───────────────────────────────────────────────────────
+
+model LeadFollowup {
+  id                 BigInt    @id @default(autoincrement())
+  leadStatusId       BigInt?   @map("lead_status_id")
+  leadSubStatusId    BigInt?   @map("lead_sub_status_id")
+  userid             BigInt
+  stdId              BigInt    @map("std_id")
+  comment            String
+  status             Int       @default(1) @db.SmallInt
+  type               String?   @db.VarChar(50)
+  fStatus            String?   @map("f_status") @db.VarChar(50)
+  description        String?
+  followupDate       DateTime? @map("followup_date") @db.Date
+  callAnsweredStatus Int?      @map("call_answered_status") @db.SmallInt
+  departmentId       BigInt?   @map("department_id")
+  statusLeadTypeId   BigInt?   @map("status_lead_type_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userid], references: [id])
+  lead Lead @relation(fields: [stdId], references: [id])
+
+  @@index([userid, createdAt])
+  @@index([stdId, createdAt])
+  @@map("lead_followups")
+}
+
+model LeadNote {
+  id        BigInt   @id @default(autoincrement())
+  leadId    BigInt   @map("lead_id")
+  userId    BigInt   @map("user_id")
+  note      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([leadId, createdAt])
+  @@map("lead_notes")
+}
+
+// Lead comments — chat-style thread between counsellors and admin on a lead.
+// Distinct from LeadNote: notes are short tagged annotations; comments are
+// a running discussion thread (legacy Common.AddComment / viewAllCommentsList).
+model LeadComment {
+  id        BigInt   @id @default(autoincrement())
+  leadId    BigInt   @map("lead_id")
+  userId    BigInt   @map("user_id")
+  comment   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([leadId, createdAt])
+  @@map("lead_comments")
+}
+
+// ─── LEAD STATUS HISTORY (audit trail) ───────────────────────────────────────
+
+model LeadStatusHistory {
+  id            BigInt   @id @default(autoincrement())
+  leadId        BigInt   @map("lead_id")
+  changedById   BigInt   @map("changed_by_id")
+  fromStatus    String?  @map("from_status") @db.VarChar(100)
+  toStatus      String   @map("to_status") @db.VarChar(100)
+  fromSubStatus String?  @map("from_sub_status") @db.VarChar(100)
+  toSubStatus   String?  @map("to_sub_status") @db.VarChar(100)
+  reason        String?
+  source        String   @default("manual") @db.VarChar(30) // manual|call|followup|bulk|api
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  lead      Lead @relation(fields: [leadId], references: [id])
+  changedBy User @relation(fields: [changedById], references: [id])
+
+  @@index([leadId, createdAt])
+  @@index([changedById, createdAt])
+  @@map("lead_status_history")
+}
+
+// ─── CALL LOG ────────────────────────────────────────────────────────────────
+
+model CallLog {
+  id                BigInt   @id @default(autoincrement())
+  leadId            BigInt   @map("lead_id")
+  userId            BigInt   @map("user_id")
+  outcome           String   @db.VarChar(30) // answered|not_answered|declined|busy|wrong_number|switched_off
+  direction         String   @default("outbound") @db.VarChar(10)
+  durationSeconds   Int?     @map("duration_seconds")
+  notes             String?
+  autoStatusApplied String?  @map("auto_status_applied") @db.VarChar(100)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([leadId, createdAt])
+  @@index([userId, createdAt])
+  @@map("lead_call_logs")
+}
+
+// ─── MOBILE APP: CALLS + DEVICES ─────────────────────────────────────────────
+// MobileCall stores calls synced from the Android counsellor app (GSM calls
+// captured by CallMonitorService). Distinct from manual CallLog used by the
+// web CRM. Both can coexist; admin dashboards roll up from MobileCall.
+
+enum MobileCallDirection {
+  OUTGOING
+  INCOMING
+}
+
+enum MobileCallStatus {
+  TRIGGERED // CRM created the trigger; phone hasn't reported yet
+  RINGING
+  ANSWERED
+  MISSED
+  REJECTED
+  NO_ANSWER
+  BUSY
+  FAILED
+}
+
+model MobileCall {
+  id                 BigInt              @id @default(autoincrement())
+  deviceCallId       String              @unique // sha1(phone+startEpoch+userId), idempotency key
+  userId             BigInt              @map("user_id") // counsellor
+  leadId             BigInt?             @map("lead_id")
+  phoneNumber        String              @map("phone_number") @db.VarChar(32)
+  direction          MobileCallDirection
+  status             MobileCallStatus
+  startedAt          DateTime            @map("started_at")
+  endedAt            DateTime?           @map("ended_at")
+  durationSec        Int                 @default(0) @map("duration_sec")
+  recordingPath      String?             @map("recording_path")
+  recordingSize      Int?                @map("recording_size")
+  recordingExpiresAt DateTime?           @map("recording_expires_at") // 90-day retention
+  recordingPreserved Boolean             @default(false) @map("recording_preserved") // admin flag, skip purge
+  triggeredFrom      String?             @map("triggered_from") @db.VarChar(20) // CRM_WEB | APP_DIALER | INCOMING | AUTO_DIALER
+  triggerCallId      BigInt?             @map("trigger_call_id") // self-ref to TRIGGERED row when web initiated
+  campaignContactId  BigInt?             @map("campaign_contact_id") // auto-dialer: links to AutoDialerCampaignContact
+  recordingPlayedId  BigInt?             @map("recording_played_id") // auto-dialer: which AutoDialerRecording was played to callee
+  // SIM / own-number that placed/received the call. Populated by the Android client
+  // from CallLog.PHONE_ACCOUNT_ID + SubscriptionManager. simNumber is often null
+  // because carriers hide the MSISDN; simSlot + simCarrier are the reliable fields.
+  simSlot            Int?                @map("sim_slot") @db.SmallInt
+  simCarrier         String?             @map("sim_carrier") @db.VarChar(80)
+  simNumber          String?             @map("sim_number") @db.VarChar(32)
+  notes              String?
+  syncedAt           DateTime            @default(now()) @map("synced_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  user    User               @relation(fields: [userId], references: [id])
+  lead    Lead?              @relation(fields: [leadId], references: [id])
+  remarks CounsellorRemark[]
+
+  @@index([userId, startedAt])
+  @@index([leadId, startedAt])
+  @@index([status, startedAt])
+  @@index([recordingExpiresAt]) // for purge cron
+  @@index([campaignContactId])
+  @@map("mobile_calls")
+}
+
+model DeviceToken {
+  id         BigInt   @id @default(autoincrement())
+  userId     BigInt   @map("user_id")
+  fcmToken   String   @unique @map("fcm_token")
+  deviceId   String   @map("device_id") @db.VarChar(100) // android device id
+  appVersion String?  @map("app_version") @db.VarChar(30)
+  platform   String   @default("android") @db.VarChar(20)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("device_tokens")
+}
+
+// ─── BRANCHES ────────────────────────────────────────────────────────────────
+
+model Branch {
+  id        BigInt   @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  city      String?  @db.VarChar(100)
+  state     String?  @db.VarChar(100)
+  country   String?  @db.VarChar(100)
+  status    Int      @default(1) @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users         User[]
+  managerAccess UserBranchAccess[]
+
+  @@map("branches")
+}
+
+// Which branches a branch-scoped manager (sub-admin / sales-head) may oversee.
+// A manager with no rows here sees NO team data until branches are assigned.
+// One manager → many branches.
+model UserBranchAccess {
+  id       BigInt @id @default(autoincrement())
+  userId   BigInt @map("user_id")
+  branchId BigInt @map("branch_id")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, branchId])
+  @@index([userId])
+  @@map("user_branch_access")
+}
+
+// ─── COMMUNICATION ───────────────────────────────────────────────────────────
+
+model MailTemplate {
+  id         BigInt   @id @default(autoincrement())
+  title      String   @db.VarChar(100)
+  subject    String   @db.VarChar(200)
+  body       String
+  userId     BigInt   @map("user_id")
+  status     Int      @default(1) @db.SmallInt
+  /// marketing | transactional
+  kind       String   @default("marketing") @db.VarChar(24)
+  /// quote_sent | order_confirmed | invoice_sent | invoice_overdue | packed | out_for_delivery | delivered | cancelled | return_received | replenish_due
+  eventKey   String?  @map("event_key") @db.VarChar(40)
+  /// Product ids inserted into this template; resolved to cards at send time.
+  productIds Json?    @map("product_ids")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([kind, eventKey])
+  @@map("mail_templates")
+}
+
+model EmailHeader {
+  id        BigInt   @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  email     String   @db.VarChar(100)
+  userId    BigInt   @map("user_id")
+  isDefault Int      @default(0) @map("is_default") @db.SmallInt
+  status    Int      @default(1) @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("email_headers")
+}
+
+model Signature {
+  id        BigInt   @id @default(autoincrement())
+  title     String   @db.VarChar(100)
+  content   String
+  userId    BigInt   @map("user_id")
+  isDefault Int      @default(0) @map("is_default") @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("signatures")
+}
+
+model SentMail {
+  id           BigInt    @id @default(autoincrement())
+  leadId       BigInt?   @map("lead_id")
+  userId       BigInt    @map("user_id")
+  toEmail      String    @map("to_email") @db.VarChar(200)
+  subject      String    @db.VarChar(200)
+  body         String
+  status       String?   @db.VarChar(20) // 'sent' | 'failed' | 'pending'
+  // Tracking columns — mirror what EmailCampaignRecipient carries so the
+  // Sent History and Reports tabs show the same funnel for quick sends as
+  // for scheduled campaigns.
+  //   messageId    — RFC Message-ID captured from SMTP for reply threading
+  //   groupId      — which email account sent it (null = default .env SMTP)
+  //   openedAt     — set by the /api/tracking/quick-open/:id pixel on first fetch
+  //   errorMessage — SMTP error string when a send fails
+  messageId    String?   @map("message_id") @db.VarChar(255)
+  groupId      BigInt?   @map("group_id")
+  openedAt     DateTime? @map("opened_at")
+  errorMessage String?   @map("error_message")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([messageId])
+  @@index([toEmail, createdAt])
+  @@map("sent_mails")
+}
+
+model StudentMailHistory {
+  id        BigInt   @id @default(autoincrement())
+  leadId    BigInt   @map("lead_id")
+  subject   String   @db.VarChar(200)
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+
+  @@map("student_mail_histories")
+}
+
+model UniversityApplicationMail {
+  id             BigInt    @id @default(autoincrement())
+  studentId      BigInt    @map("student_id")
+  toEmail        String    @map("to_email") @db.VarChar(200)
+  cc             String?   @db.VarChar(200)
+  greeting       String?   @db.VarChar(100)
+  recipientName  String?   @map("recipient_name") @db.VarChar(200)
+  senderName     String?   @map("sender_name") @db.VarChar(200)
+  program        String?   @db.VarChar(200)
+  universityName String?   @map("university_name") @db.VarChar(200)
+  subject        String    @db.VarChar(250)
+  body           String    @db.Text
+  attachedDocs   String?   @map("attached_docs") @db.Text
+  sentByUserId   BigInt?   @map("sent_by_user_id")
+  trackingToken  String    @unique @map("tracking_token") @db.VarChar(64)
+  isOpened       Boolean   @default(false) @map("is_opened")
+  openCount      Int       @default(0) @map("open_count")
+  firstOpenedAt  DateTime? @map("first_opened_at")
+  lastOpenedAt   DateTime? @map("last_opened_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  student Lead  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sentBy  User? @relation(fields: [sentByUserId], references: [id], onDelete: SetNull)
+
+  @@map("university_application_mails")
+}
+
+// ─── EMAIL CAMPAIGNS ─────────────────────────────────────────────────────────
+// CampaignGroup = one configured sender (webmail account: SMTP for outbound,
+// IMAP for inbound). authorityScore (1-10) controls how much of a campaign's
+// recipient list this group is given when distribution = AUTHORITY.
+// hourlyCap = max sends per hour for this group (default 50). Counters are
+// stored on EmailCampaignChunk so the scheduler can tell when a group is "full"
+// for the current hour.
+
+model CampaignGroup {
+  id              BigInt   @id @default(autoincrement())
+  name            String   @db.VarChar(120)
+  fromName        String   @map("from_name") @db.VarChar(120)
+  fromEmail       String   @unique @map("from_email") @db.VarChar(160)
+  // Outbound (SMTP)
+  smtpHost        String   @map("smtp_host") @db.VarChar(160)
+  smtpPort        Int      @map("smtp_port")
+  smtpUser        String   @map("smtp_user") @db.VarChar(160)
+  smtpPass        String   @map("smtp_pass") @db.VarChar(255)
+  smtpSecure      Boolean  @default(true) @map("smtp_secure")
+  // Inbound (IMAP) — used by the inbox poller for replies
+  imapHost        String?  @map("imap_host") @db.VarChar(160)
+  imapPort        Int?     @map("imap_port")
+  imapUser        String?  @map("imap_user") @db.VarChar(160)
+  imapPass        String?  @map("imap_pass") @db.VarChar(255)
+  imapSecure      Boolean  @default(true) @map("imap_secure")
+  imapLastUid     Int?     @map("imap_last_uid") // resume polling after reboot
+  // Throughput + ranking
+  hourlyCap       Int      @default(50) @map("hourly_cap")
+  authorityScore  Int      @default(5) @map("authority_score") @db.SmallInt // 1..10
+  isActive        Boolean  @default(true) @map("is_active")
+  // Telemetry (rolling — periodically reset by the scheduler)
+  bouncesThisHour Int      @default(0) @map("bounces_this_hour")
+  sentThisHour    Int      @default(0) @map("sent_this_hour")
+  hourWindowAt    DateTime @default(now()) @map("hour_window_at")
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  chunks     EmailCampaignChunk[]
+  recipients EmailCampaignRecipient[]
+  inbound    InboundMail[]
+
+  @@map("campaign_groups")
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignDistribution {
+  AUTHORITY // weighted by group.authorityScore
+  EQUAL // round-robin
+  MANUAL // explicit per-group counts
+}
+
+enum RecipientStatus {
+  QUEUED
+  SENT
+  DELIVERED // SMTP accepted (best we can know without DSN)
+  BOUNCED
+  FAILED
+  UNSUBSCRIBED
+  REPLIED
+}
+
+model EmailCampaign {
+  id              BigInt               @id @default(autoincrement())
+  userId          BigInt               @map("user_id") // creator
+  name            String               @db.VarChar(160)
+  subject         String               @db.VarChar(240)
+  bodyHtml        String               @map("body_html") // pre-merge template, may contain {{name}}
+  signatureId     BigInt?              @map("signature_id")
+  status          CampaignStatus       @default(DRAFT)
+  distribution    CampaignDistribution @default(AUTHORITY)
+  totalRecipients Int                  @default(0) @map("total_recipients")
+  chunkSize       Int                  @default(50) @map("chunk_size")
+  batchGapMs      Int                  @default(3600000) @map("batch_gap_ms") // 1h
+  perEmailDelayMs Int                  @default(5000) @map("per_email_delay_ms")
+  startAt         DateTime             @map("start_at") // first chunk fires at/after this
+  finishedAt      DateTime?            @map("finished_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  chunks     EmailCampaignChunk[]
+  recipients EmailCampaignRecipient[]
+
+  @@index([status, startAt])
+  @@map("email_campaigns")
+}
+
+model EmailCampaignChunk {
+  id          BigInt    @id @default(autoincrement())
+  campaignId  BigInt    @map("campaign_id")
+  groupId     BigInt    @map("group_id")
+  index       Int // 0-based position within campaign per group
+  scheduledAt DateTime  @map("scheduled_at")
+  startedAt   DateTime? @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  attempted   Int       @default(0)
+  sent        Int       @default(0)
+  failed      Int       @default(0)
+
+  campaign   EmailCampaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  group      CampaignGroup            @relation(fields: [groupId], references: [id])
+  recipients EmailCampaignRecipient[]
+
+  @@index([campaignId])
+  @@index([scheduledAt])
+  @@map("email_campaign_chunks")
+}
+
+model EmailCampaignRecipient {
+  id           BigInt          @id @default(autoincrement())
+  campaignId   BigInt          @map("campaign_id")
+  chunkId      BigInt?         @map("chunk_id")
+  groupId      BigInt?         @map("group_id")
+  leadId       BigInt?         @map("lead_id")
+  toEmail      String          @map("to_email") @db.VarChar(200)
+  toName       String?         @map("to_name") @db.VarChar(160)
+  status       RecipientStatus @default(QUEUED)
+  messageId    String?         @map("message_id") @db.VarChar(255) // RFC Message-ID for reply threading
+  sentAt       DateTime?       @map("sent_at")
+  errorMessage String?         @map("error_message")
+  openedAt     DateTime?       @map("opened_at")
+  repliedAt    DateTime?       @map("replied_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  campaign EmailCampaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  chunk    EmailCampaignChunk? @relation(fields: [chunkId], references: [id])
+  group    CampaignGroup?      @relation(fields: [groupId], references: [id])
+  lead     Lead?               @relation(fields: [leadId], references: [id])
+  inbound  InboundMail[]
+
+  @@unique([campaignId, toEmail], name: "campaign_recipient_uk")
+  @@index([status])
+  @@index([messageId])
+  @@map("email_campaign_recipients")
+}
+
+// Inbound mail captured by the IMAP poller. Linked to a recipient row via
+// In-Reply-To / References header matching against EmailCampaignRecipient.messageId,
+// and to a lead by email address. Drives the "any revert on that mail" feature
+// + the lead-detail inbox tab.
+
+model InboundMail {
+  id          BigInt   @id @default(autoincrement())
+  groupId     BigInt   @map("group_id")
+  imapUid     Int      @map("imap_uid")
+  messageId   String?  @map("message_id") @db.VarChar(255)
+  inReplyTo   String?  @map("in_reply_to") @db.VarChar(255)
+  fromEmail   String   @map("from_email") @db.VarChar(200)
+  fromName    String?  @map("from_name") @db.VarChar(160)
+  toEmail     String   @map("to_email") @db.VarChar(200)
+  subject     String   @db.VarChar(500)
+  bodyHtml    String?  @map("body_html")
+  bodyText    String?  @map("body_text")
+  receivedAt  DateTime @map("received_at")
+  leadId      BigInt?  @map("lead_id")
+  recipientId BigInt?  @map("recipient_id") // EmailCampaignRecipient.id when this is a reply to a campaign mail
+  isRead      Boolean  @default(false) @map("is_read")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  group     CampaignGroup           @relation(fields: [groupId], references: [id])
+  lead      Lead?                   @relation(fields: [leadId], references: [id])
+  recipient EmailCampaignRecipient? @relation(fields: [recipientId], references: [id])
+
+  @@unique([groupId, imapUid], name: "inbound_group_uid_uk")
+  @@index([leadId])
+  @@index([receivedAt])
+  @@map("inbound_mails")
+}
+
+// ─── CHAT ────────────────────────────────────────────────────────────────────
+
+model ChatMessage {
+  id        BigInt   @id @default(autoincrement())
+  fromId    BigInt   @map("from_id")
+  toId      BigInt   @map("to_id")
+  message   String
+  seen      Int      @default(0) @db.SmallInt
+  locked    Int      @default(0) @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  from User @relation("ChatSender", fields: [fromId], references: [id])
+  to   User @relation("ChatRecipient", fields: [toId], references: [id])
+
+  // Bell feed: unseen-message count for the current user.
+  @@index([toId, seen])
+  @@map("chat_messages")
+}
+
+// ─── FINANCIAL ───────────────────────────────────────────────────────────────
+
+model Invoice {
+  id          BigInt    @id @default(autoincrement())
+  leadId      BigInt    @map("lead_id")
+  userId      BigInt    @map("user_id")
+  invoiceNo   String    @map("invoice_no") @db.VarChar(50)
+  amount      Decimal   @db.Decimal(10, 2)
+  dueDate     DateTime? @map("due_date") @db.Date
+  status      String    @default("pending") @db.VarChar(20)
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  payments FeePayment[]
+  user     User         @relation(fields: [userId], references: [id])
+
+  @@map("tbl_invoicelist")
+}
+
+model FeePayment {
+  id        BigInt   @id @default(autoincrement())
+  invoiceId BigInt   @map("invoice_id")
+  leadId    BigInt   @map("lead_id")
+  amount    Decimal  @db.Decimal(10, 2)
+  paidAt    DateTime @map("paid_at") @db.Date
+  mode      String?  @db.VarChar(50)
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("tbl_feespayment")
+}
+
+// ─── TASKS & TODOS ───────────────────────────────────────────────────────────
+
+model Task {
+  id           BigInt    @id @default(autoincrement())
+  title        String    @db.VarChar(200)
+  description  String?
+  /// What this task is about: lead | account | contact | deal | quote | order.
+  ///
+  /// Both NULL for every task that existed before the B2B work, which is
+  /// accurate — a task had no subject at all until now, so nothing is lost and
+  /// no existing query changes meaning.
+  entityType   String?   @map("entity_type") @db.VarChar(20)
+  entityId     BigInt?   @map("entity_id")
+  assignedById BigInt    @map("assigned_by_id")
+  assignedToId BigInt    @map("assigned_to_id")
+  dueDate      DateTime? @map("due_date") @db.Date
+  status       Int       @default(0) @db.SmallInt
+  priority     String    @default("medium") @db.VarChar(20)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  assignedBy User @relation("AssignedBy", fields: [assignedById], references: [id])
+  assignedTo User @relation("AssignedTo", fields: [assignedToId], references: [id])
+
+  // Bell feed: open tasks ordered by due date.
+  @@index([status, dueDate])
+  @@index([entityType, entityId])
+  @@index([assignedToId, status])
+  @@map("tbl_todolist")
+}
+
+// A dated calling assignment. Unlike generic Tasks, this permanently records
+// the exact leads the counsellor must work and lets progress be calculated
+// from the live lead activity.
+model LeadWorkBatch {
+  id           BigInt    @id @default(autoincrement())
+  title        String    @db.VarChar(200)
+  // Null when the task was hand-picked from the leads list (arbitrary
+  // created-dates); set when it came from a single created-date cohort.
+  leadDate     DateTime? @map("lead_date") @db.Date
+  dueDate      DateTime? @map("due_date") @db.Date
+  workDate     DateTime  @default(now()) @map("work_date") @db.Date
+  workType     String    @default("INITIAL_CALL") @map("work_type") @db.VarChar(30)
+  sequence     Int       @default(1)
+  priority     String    @default("high") @db.VarChar(20)
+  notes        String?   @db.Text
+  status       Int       @default(0) @db.SmallInt // 0=open, 1=completed, 2=cancelled
+  assignedById BigInt    @map("assigned_by_id")
+  assignedToId BigInt    @map("assigned_to_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  assignedBy User                @relation("LeadWorkBatchCreator", fields: [assignedById], references: [id])
+  assignedTo User                @relation("LeadWorkBatchAssignee", fields: [assignedToId], references: [id])
+  items      LeadWorkBatchItem[]
+
+  @@index([assignedToId, workDate, sequence])
+  @@index([assignedToId, status, dueDate])
+  // /workload asks for one work date across every counsellor, so neither of the
+  // assignee-leading indexes above can serve it.
+  @@index([workDate, status])
+  @@map("lead_work_batches")
+}
+
+model LeadWorkBatchItem {
+  id             BigInt    @id @default(autoincrement())
+  batchId        BigInt    @map("batch_id")
+  leadId         BigInt    @map("lead_id")
+  completedAt    DateTime? @map("completed_at")
+  completionType String?   @map("completion_type") @db.VarChar(30)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  batch LeadWorkBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  lead  Lead          @relation(fields: [leadId], references: [id])
+
+  @@unique([batchId, leadId])
+  @@index([leadId])
+  @@map("lead_work_batch_items")
+}
+
+// ─── REMINDERS ───────────────────────────────────────────────────────────────
+
+model Reminder {
+  id           BigInt   @id @default(autoincrement())
+  leadId       BigInt   @map("lead_id")
+  userId       BigInt   @map("user_id")
+  reminderDate DateTime @map("reminder_date") @db.Timestamptz(6)
+  note         String?
+  status       Int      @default(0) @db.SmallInt
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([leadId, reminderDate])
+  // Bell feed: today's open reminders, all users (admin) or one (counsellor).
+  @@index([reminderDate, status])
+  @@index([userId, reminderDate])
+  @@map("tbl_reminder")
+}
+
+// ─── EVENTS / CALENDAR ───────────────────────────────────────────────────────
+
+model Event {
+  id          BigInt    @id @default(autoincrement())
+  title       String    @db.VarChar(200)
+  description String?
+  startDate   DateTime  @map("start_date")
+  endDate     DateTime? @map("end_date")
+  userId      BigInt    @map("user_id")
+  color       String?   @db.VarChar(20)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("events")
+}
+
+// ─── ANNOUNCEMENTS ───────────────────────────────────────────────────────────
+
+model Announcement {
+  id          BigInt   @id @default(autoincrement())
+  title       String   @db.VarChar(200)
+  description String?
+  userId      BigInt   @map("user_id")
+  status      Int      @default(1) @db.SmallInt
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy User               @relation("AnnouncementCreator", fields: [userId], references: [id])
+  reads     AnnouncementRead[]
+
+  @@map("tbl_announcements")
+}
+
+// Per-user "I have read this" acknowledgement — drives the dismiss-the-popup
+// behaviour. Existence of a row means read; absence means unread.
+model AnnouncementRead {
+  id             BigInt   @id @default(autoincrement())
+  announcementId BigInt   @map("announcement_id")
+  userId         BigInt   @map("user_id")
+  readAt         DateTime @default(now()) @map("read_at")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@map("tbl_announcement_reads")
+}
+
+// ─── EMPLOYEE LEAVES ─────────────────────────────────────────────────────────
+
+model EmployeeLeave {
+  id         BigInt   @id @default(autoincrement())
+  userId     BigInt   @map("user_id")
+  fromDate   DateTime @map("from_date") @db.Date
+  toDate     DateTime @map("to_date") @db.Date
+  reason     String?
+  status     String   @default("pending") @db.VarChar(20)
+  approvedBy BigInt?  @map("approved_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  approvalNote String? @map("approval_note")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("employee_leaves")
+}
+
+// ─── DOCUMENTS ───────────────────────────────────────────────────────────────
+
+model StudentDocument {
+  id        BigInt   @id @default(autoincrement())
+  leadId    BigInt   @map("lead_id")
+  title     String   @db.VarChar(200)
+  filepath  String
+  filename  String   @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+
+  @@index([leadId])
+  @@map("student_documents")
+}
+
+model UserDocument {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  title     String   @db.VarChar(200)
+  filepath  String
+  filename  String   @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_documents")
+}
+
+// ─── SYSTEM SETTINGS ─────────────────────────────────────────────────────────
+
+model SystemSetting {
+  id        BigInt   @id @default(autoincrement())
+  key       String   @unique @db.VarChar(100)
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ─── VERIFIED FIELD VALUES ───────────────────────────────────────────────────
+
+model VerifiedFieldValue {
+  id         BigInt   @id @default(autoincrement())
+  field      String   @db.VarChar(50)
+  value      String   @db.VarChar(255)
+  parent     String?  @db.VarChar(255)
+  verifiedBy BigInt   @map("verified_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([field, value])
+  @@index([field])
+  @@map("verified_field_values")
+}
+
+// ─── GEO ─────────────────────────────────────────────────────────────────────
+
+model Country {
+  id   Int    @id @default(autoincrement())
+  name String @db.VarChar(100)
+  code String @db.VarChar(10)
+
+  @@map("countries")
+}
+
+// ─── WEBSITES / SOURCES ──────────────────────────────────────────────────────
+
+model Website {
+  id      Int    @id @default(autoincrement())
+  website String @db.VarChar(100)
+  country String @db.VarChar(20)
+
+  @@map("websites")
+}
+
+// ─── AGENTS & FRANCHISES ─────────────────────────────────────────────────────
+
+model Agent {
+  id          BigInt   @id @default(autoincrement())
+  name        String   @db.VarChar(200)
+  email       String   @unique @db.VarChar(150)
+  mobile      String   @db.VarChar(50)
+  companyName String?  @map("company_name") @db.VarChar(200)
+  address     String?
+  city        String?  @db.VarChar(100)
+  state       String?  @db.VarChar(100)
+  country     String?  @db.VarChar(100)
+  status      Int      @default(1) @db.SmallInt
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("agents")
+}
+
+// ─── LEAD CONFIGURATIONS ─────────────────────────────────────────────────────
+
+model LeadDepartmentLeadType {
+  id           BigInt @id @default(autoincrement())
+  departmentId BigInt @map("department_id")
+  leadTypeId   BigInt @map("lead_type_id")
+
+  @@map("lead_department_leadtypes")
+}
+
+model AsignBranch {
+  id       BigInt @id @default(autoincrement())
+  branchId BigInt @map("branch_id")
+  userId   BigInt @map("user_id")
+
+  @@map("asign_branches")
+}
+
+// ─── UI FLAGS ────────────────────────────────────────────────────────────────
+
+model FlagMessage {
+  id        BigInt   @id @default(autoincrement())
+  leadId    BigInt   @map("lead_id")
+  userId    BigInt   @map("user_id")
+  message   String
+  type      String   @db.VarChar(50) // "send" or "rcv"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Bell feed: newest 10 flags of one type.
+  @@index([type, createdAt])
+  // Every lead-detail open reads this table by leadId, and without an index
+  // that is a sequential scan of every flag ever raised — invisible at six
+  // counsellors, fatal once the table is shared by many. Matches the
+  // [leadId, createdAt] shape the other lead sub-resources already use.
+  @@index([leadId, createdAt])
+  @@map("flag_messages")
+}
+
+// ─── STUDENT EDUCATION HISTORY & EXAMS ────────────────────────────────────────
+// Replicates legacy Common.addSchool/updSchool/updUcat/updDmat/updSat/addFB/updFB.
+// Student here = Lead.id (the legacy CRM never separated the two).
+
+model StudentSchoolHistory {
+  id          BigInt   @id @default(autoincrement())
+  leadId      BigInt   @map("lead_id")
+  level       String?  @db.VarChar(50) // "10th" | "12th" | "graduation" | "post-graduation"
+  schoolName  String?  @map("school_name") @db.VarChar(200)
+  board       String?  @db.VarChar(100)
+  passingYear Int?     @map("passing_year")
+  percentage  String?  @db.VarChar(20)
+  stream      String?  @db.VarChar(100)
+  city        String?  @db.VarChar(100)
+  country     String?  @db.VarChar(100)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+
+  @@index([leadId])
+  @@map("student_school_history")
+}
+
+model StudentExamUcat {
+  id              BigInt    @id @default(autoincrement())
+  leadId          BigInt    @unique @map("lead_id")
+  examDate        DateTime? @map("exam_date") @db.Date
+  totalScore      Int?      @map("total_score")
+  verbalReasoning Int?      @map("verbal_reasoning")
+  decisionMaking  Int?      @map("decision_making")
+  quantitative    Int?
+  abstractReason  Int?      @map("abstract_reason")
+  situational     String?   @db.VarChar(50)
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+
+  @@map("student_exam_ucat")
+}
+
+model StudentExamDmat {
+  id         BigInt    @id @default(autoincrement())
+  leadId     BigInt    @unique @map("lead_id")
+  examDate   DateTime? @map("exam_date") @db.Date
+  totalScore Int?      @map("total_score")
+  physics    Int?
+  chemistry  Int?
+  biology    Int?
+  reasoning  Int?
+  notes      String?
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+
+  @@map("student_exam_dmat")
+}
+
+model StudentExamSat {
+  id         BigInt    @id @default(autoincrement())
+  leadId     BigInt    @unique @map("lead_id")
+  examDate   DateTime? @map("exam_date") @db.Date
+  totalScore Int?      @map("total_score")
+  reading    Int?
+  writing    Int?
+  math       Int?
+  essay      Int?
+  notes      String?
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+
+  @@map("student_exam_sat")
+}
+
+// Counsellor feedback log on a student — legacy Common.addFB/updFB.
+model StudentFeedback {
+  id        BigInt   @id @default(autoincrement())
+  leadId    BigInt   @map("lead_id")
+  userId    BigInt   @map("user_id")
+  feedback  String
+  rating    Int?     @db.SmallInt // 1-5 optional
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id])
+
+  @@index([leadId, createdAt])
+  @@map("student_feedback")
+}
+
+// Sideloaded mobile app releases — uploaded by admins, downloaded by counsellors.
+model AppRelease {
+  id           BigInt   @id @default(autoincrement())
+  versionCode  Int      @unique @map("version_code")
+  versionName  String   @map("version_name") @db.VarChar(50)
+  fileUrl      String   @map("file_url") @db.VarChar(500)
+  sha256       String   @db.VarChar(64)
+  sizeBytes    Int      @map("size_bytes")
+  releaseNotes String?  @map("release_notes") @db.Text
+  isMandatory  Boolean  @default(false) @map("is_mandatory")
+  /// Gate between "uploaded" and "counsellors are told about it".
+  /// /latest used to return the highest versionCode outright, so a single test
+  /// upload with a high code immediately prompted — or, if mandatory, hard-
+  /// blocked — the entire field team, with deleting the row as the only undo.
+  isPublished  Boolean  @default(false) @map("is_published")
+  uploadedBy   BigInt?  @map("uploaded_by")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  uploader User? @relation(fields: [uploadedBy], references: [id])
+
+  @@index([versionCode(sort: Desc)])
+  @@index([isPublished, versionCode(sort: Desc)])
+  @@map("app_releases")
+}
+
+// ─── PARTNER LEAD SOURCES ────────────────────────────────────────────────────
+// External integrations that push leads INTO the CRM (e.g. Sulekha, JustDial).
+// Each partner gets its own slug, hashed API key, and audit log. The endpoint
+// is write-only: partners can POST new leads, never read existing ones.
+model LeadSource {
+  id                  Int       @id @default(autoincrement())
+  slug                String    @unique @db.VarChar(60)
+  name                String    @db.VarChar(120)
+  active              Boolean   @default(true)
+  keyHash             String    @map("key_hash") @db.VarChar(120)
+  webhookSecret       String?   @map("webhook_secret") @db.VarChar(120)
+  ipAllowlist         String[]  @default([]) @map("ip_allowlist")
+  defaultDepartmentId BigInt?   @map("default_department_id")
+  defaultLeadStatus   String?   @map("default_lead_status") @db.VarChar(100)
+  totalLeads          Int       @default(0) @map("total_leads")
+  lastUsedAt          DateTime? @map("last_used_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  ingestionLogs LeadIngestionLog[]
+
+  @@map("lead_sources")
+}
+
+model LeadIngestionLog {
+  id         BigInt   @id @default(autoincrement())
+  sourceId   Int      @map("source_id")
+  receivedAt DateTime @default(now()) @map("received_at")
+  ip         String?  @db.VarChar(64)
+  status     String   @db.VarChar(40)
+  leadId     BigInt?  @map("lead_id")
+  payload    Json
+  errorMsg   String?  @map("error_msg") @db.Text
+
+  source LeadSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, receivedAt(sort: Desc)])
+  @@map("lead_ingestion_logs")
+}
+
+// ─── LEAD STAGING (Filter Leads) ─────────────────────────────────────────────
+// Bulk-uploaded leads from external sources (e.g. partner Excel sheets) that
+// need to be verified by tele-callers BEFORE being pushed into the real
+// `leads` table. The batch name becomes the lead `source` once seeded.
+model LeadStagingBatch {
+  id                   BigInt    @id @default(autoincrement())
+  name                 String    @db.VarChar(150) // user-given batch name (becomes lead source)
+  fileName             String?   @map("file_name") @db.VarChar(255)
+  totalCount           Int       @default(0) @map("total_count")
+  verifiedCount        Int       @default(0) @map("verified_count")
+  rejectedCount        Int       @default(0) @map("rejected_count")
+  callNotAnsweredCount Int       @default(0) @map("call_not_answered_count")
+  seededCount          Int       @default(0) @map("seeded_count")
+  uploadedById         BigInt    @map("uploaded_by_id")
+  // Soft delete — set when admin moves the batch to trash. Restore clears it.
+  // Permanent delete (hard delete) is a separate explicit action from the trash view.
+  deletedAt            DateTime? @map("deleted_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  items     LeadStagingItem[]
+  assignees LeadStagingBatchAssignee[]
+
+  @@index([createdAt(sort: Desc)])
+  @@index([deletedAt])
+  @@map("lead_staging_batches")
+}
+
+// Join table — a single batch can be assigned to multiple counsellors.
+// When seeded, the verified leads are duplicated to every assignee.
+model LeadStagingBatchAssignee {
+  batchId   BigInt   @map("batch_id")
+  userId    BigInt   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  batch LeadStagingBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([batchId, userId])
+  @@index([userId])
+  @@map("lead_staging_batch_assignees")
+}
+
+model LeadStagingItem {
+  id                  BigInt   @id @default(autoincrement())
+  batchId             BigInt   @map("batch_id")
+  name                String   @db.VarChar(150)
+  email               String?  @db.VarChar(150)
+  phone               String?  @db.VarChar(50)
+  // Extended lead fields — populated from bulk-upload Excel so the seeded Lead
+  // row gets the full profile in one pass instead of only Name/Email/Phone.
+  father              String?  @db.VarChar(100)
+  mother              String?  @db.VarChar(100)
+  email2              String?  @db.VarChar(150)
+  email3              String?  @db.VarChar(150)
+  mobile2             String?  @db.VarChar(50)
+  mobile3             String?  @db.VarChar(50)
+  fatherMobile        String?  @map("father_mobile") @db.VarChar(50)
+  motherMobile        String?  @map("mother_mobile") @db.VarChar(50)
+  city                String?  @db.VarChar(100)
+  state               String?  @db.VarChar(50)
+  country             String?  @db.VarChar(100)
+  pincode             String?  @db.VarChar(20)
+  dob                 String?  @db.VarChar(100)
+  gender              String?  @db.VarChar(10)
+  nationality         String?  @db.VarChar(50)
+  intrestedCourse     String?  @map("intrested_course") @db.VarChar(100)
+  intrestedUniversity String?  @map("intrested_university") @db.VarChar(100)
+  event               String?  @db.VarChar(100)
+  source              String?  @db.VarChar(100)
+  leadType            String?  @map("lead_type") @db.VarChar(50)
+  leadComment         String?  @map("lead_comment") @db.Text
+  // verification: null = pending, true = verified, false = rejected (not verified)
+  verified            Boolean? @map("verified")
+  // Third review state — mutually exclusive with `verified`. Tele-caller marks
+  // this when the lead didn't pick up; the item stays out of the seed pool until
+  // someone reaches them and flips it to verified.
+  callNotAnswered     Boolean  @default(false) @map("call_not_answered")
+  comments            String?  @db.Text
+  // Author tracking — preserved per item so seeding can attribute the comment
+  // and the seeded lead's assignment to the counsellor who actually did the
+  // work, not to whoever clicked "Seed".
+  verifiedById        BigInt?  @map("verified_by_id")
+  commentedById       BigInt?  @map("commented_by_id")
+  seeded              Boolean  @default(false)
+  leadId              BigInt?  @map("lead_id") // set after seeding (FK to Lead.id, no relation to avoid back-pop)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  batch LeadStagingBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@map("lead_staging_items")
+}
+
+// ─── B2B / AUTO DIALER ───────────────────────────────────────────────────────
+// B2B contact bank — admin-uploaded via CSV/XLSX. Separate from Lead because:
+// (a) no full lead lifecycle (status/sub-status/cascade), just dial-and-log
+// (b) one contact can participate in multiple campaigns over time
+model B2bContact {
+  id          BigInt   @id @default(autoincrement())
+  name        String   @db.VarChar(150)
+  email       String?  @db.VarChar(150)
+  phone       String   @db.VarChar(32) // E.164-normalized when possible
+  state       String?  @db.VarChar(80)
+  uploadBatch String   @map("upload_batch") @db.VarChar(64) // UUID groups one CSV/XLSX upload
+  source      String   @default("csv") @db.VarChar(20) // csv | xlsx | api
+  uploadedBy  BigInt   @map("uploaded_by")
+  dndFlag     Boolean  @default(false) @map("dnd_flag")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  campaignContacts AutoDialerCampaignContact[]
+
+  @@index([phone])
+  @@index([state])
+  @@index([uploadBatch])
+  @@index([createdAt(sort: Desc)])
+  @@map("b2b_contacts")
+}
+
+model AutoDialerRecording {
+  id          BigInt    @id @default(autoincrement())
+  name        String    @db.VarChar(150)
+  filePath    String    @map("file_path") // uploads/campaign-recordings/{userId}/{YYYY-MM}/...
+  durationSec Int       @default(0) @map("duration_sec")
+  sizeBytes   Int       @default(0) @map("size_bytes")
+  mimeType    String    @default("audio/mpeg") @map("mime_type") @db.VarChar(80)
+  uploadedBy  BigInt    @map("uploaded_by")
+  archivedAt  DateTime? @map("archived_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  campaigns AutoDialerCampaign[]
+
+  @@index([createdAt(sort: Desc)])
+  @@map("auto_dialer_recordings")
+}
+
+model AutoDialerCampaign {
+  id            BigInt    @id @default(autoincrement())
+  name          String    @db.VarChar(200)
+  description   String?
+  type          String    @default("B2B") @db.VarChar(10) // B2B | B2C (B2C placeholder)
+  recordingId   BigInt?   @map("recording_id")
+  callGapSec    Int       @default(30) @map("call_gap_sec") // min 15
+  status        String    @default("draft") @db.VarChar(20) // draft | active | paused | completed
+  totalContacts Int       @default(0) @map("total_contacts")
+  createdBy     BigInt    @map("created_by")
+  startedAt     DateTime? @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  recording   AutoDialerRecording?           @relation(fields: [recordingId], references: [id])
+  assignments AutoDialerCampaignAssignment[]
+  contacts    AutoDialerCampaignContact[]
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("auto_dialer_campaigns")
+}
+
+model AutoDialerCampaignAssignment {
+  id           BigInt   @id @default(autoincrement())
+  campaignId   BigInt   @map("campaign_id")
+  counsellorId BigInt   @map("counsellor_id")
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+
+  campaign AutoDialerCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, counsellorId])
+  @@index([counsellorId])
+  @@map("auto_dialer_campaign_assignments")
+}
+
+model AutoDialerCampaignContact {
+  id               BigInt    @id @default(autoincrement())
+  campaignId       BigInt    @map("campaign_id")
+  b2bContactId     BigInt    @map("b2b_contact_id")
+  assignedToUserId BigInt?   @map("assigned_to_user_id")
+  status           String    @default("pending") @db.VarChar(20) // pending | dialing | connected | no_answer | busy | declined | failed | completed | skipped
+  attemptCount     Int       @default(0) @map("attempt_count")
+  lastAttemptAt    DateTime? @map("last_attempt_at")
+  mobileCallId     BigInt?   @map("mobile_call_id") // latest MobileCall row for this contact
+  notes            String?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  campaign   AutoDialerCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  b2bContact B2bContact         @relation(fields: [b2bContactId], references: [id])
+
+  @@unique([campaignId, b2bContactId])
+  @@index([campaignId, assignedToUserId, status])
+  @@index([assignedToUserId, status])
+  @@map("auto_dialer_campaign_contacts")
+}
+
+// ─── BULK OPERATIONS (audit + undo) ──────────────────────────────────────────
+// Every multi-lead admin operation routed through the bulk engine writes one
+// BulkOperation row. The row records who ran it, what filter/ids it targeted,
+// the per-step recipe, progress, and an optional undo snapshot.
+//
+// status:    pending | running | completed | partial | failed | cancelled | undone
+// recipe:    JSON array of steps: [{type:"assign", counsellorId:12}, ...]
+// snapshot:  JSON before-state per lead per reversible step, used by /undo.
+// failures:  per-leadId error messages, capped at a few hundred entries.
+model BulkOperation {
+  id         BigInt    @id @default(autoincrement())
+  actorId    BigInt    @map("actor_id")
+  kind       String    @db.VarChar(40) // 'apply' | 'assign' | 'unassign' | 'move' | 'status' | 'delete' | 'restore' | 'permanent-delete' | 'tag' | 'note' | 'reminder' | 'followup' | 'call-status' | 'field-update' | 'merge'
+  status     String    @default("pending") @db.VarChar(20)
+  source     String    @default("web") @db.VarChar(20) // 'web' | 'api' | 'cron'
+  dryRun     Boolean   @default(false) @map("dry_run")
+  filter     Json? // the filter snapshot ({} when leadIds were used directly)
+  recipe     Json // step list executed (single-step ops still record one entry)
+  total      Int       @default(0)
+  processed  Int       @default(0)
+  succeeded  Int       @default(0)
+  failed     Int       @default(0)
+  skipped    Int       @default(0)
+  message    String?   @db.VarChar(500)
+  failures   Json? // [{leadId, step, error}, ...] - capped
+  snapshot   Json? // [{leadId, before:{...}}] - reversible ops only
+  undoneAt   DateTime? @map("undone_at")
+  undoneById BigInt?   @map("undone_by_id")
+  startedAt  DateTime? @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  actor User @relation("BulkOperationActor", fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([kind, createdAt(sort: Desc)])
+  @@map("bulk_operations")
+}
+
+// Saved filter+recipe combo so admins can re-run common bulk flows
+// (e.g. "Stale Delhi leads → reassign to me"). Visible to the owner only.
+model BulkPreset {
+  id        BigInt   @id @default(autoincrement())
+  ownerId   BigInt   @map("owner_id")
+  name      String   @db.VarChar(150)
+  filter    Json // filter snapshot
+  recipe    Json // step list
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  owner User @relation("BulkPresetOwner", fields: [ownerId], references: [id])
+
+  @@index([ownerId, name])
+  @@map("bulk_presets")
+}
+
+// Remarks left by admins for counsellors
+model CounsellorRemark {
+  id           BigInt   @id @default(autoincrement())
+  counsellorId BigInt   @map("counsellor_id")
+  createdById  BigInt   @map("created_by_id")
+  remark       String   @db.Text
+  callId       BigInt?  @map("call_id")
+  hourContext  String?  @map("hour_context") @db.VarChar(100)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  counsellor User        @relation("CounsellorRemarks", fields: [counsellorId], references: [id], onDelete: Cascade)
+  createdBy  User        @relation("CreatedRemarks", fields: [createdById], references: [id], onDelete: Cascade)
+  call       MobileCall? @relation(fields: [callId], references: [id], onDelete: SetNull)
+
+  @@index([counsellorId])
+  @@index([createdById])
+  @@index([callId])
+  @@map("counsellor_remarks")
+}
+
+// Webmail Account credentials and auto-login links for Admin
+model WebmailAccount {
+  id         BigInt   @id @default(autoincrement())
+  email      String   @db.VarChar(255)
+  password   String   @db.VarChar(255)
+  webmailUrl String   @default("https://webmail.tutelagestudy.com") @map("webmail_url") @db.VarChar(255)
+  status     Int      @default(1)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("webmail_accounts")
+}
+
+// ─── WHATSAPP TEMPLATES ───────────────────────────────────────────────────────
+model WhatsappTemplate {
+  id          BigInt   @id @default(autoincrement())
+  title       String   @db.VarChar(255)
+  description String   @db.Text
+  category    String   @default("greeting") @db.VarChar(50) // 'greeting', 'followup', 'promotion', 'general'
+  userId      BigInt   @map("user_id")
+  status      Int      @default(1) @db.SmallInt
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachments WhatsappTemplateFile[]
+
+  @@index([userId])
+  @@index([category])
+  @@map("whatsapp_templates")
+}
+
+model WhatsappTemplateFile {
+  id         BigInt   @id @default(autoincrement())
+  templateId BigInt   @map("template_id")
+  filePath   String   @map("file_path") @db.VarChar(255)
+  fileName   String   @map("file_name") @db.VarChar(255)
+  fileType   String?  @map("file_type") @db.VarChar(100)
+  fileSize   BigInt?  @map("file_size")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  template WhatsappTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("whatsapp_template_files")
+}
+
+// ─── API USAGE METRICS ───────────────────────────────────────────────────────
+// Per-endpoint request counters. Deliberately NOT one row per request: the
+// middleware accumulates in RAM and flushes pre-aggregated buckets, so DB write
+// volume is fixed by the clock (~288 statements/day) rather than by traffic.
+//
+// Three granularities live in one table, discriminated by `granularity`:
+//   m5 — 5-minute buckets, written by the flusher, kept 7 days
+//   h1 — hourly, recomputed from m5 by the nightly rollup, kept 90 days
+//   d1 — daily,  recomputed from h1 by the nightly rollup, kept forever
+//
+// `route` is always a NORMALISED pattern (/api/leads/:id), never a raw path —
+// raw paths would make this table unbounded. See middleware/api-metrics.ts.
+model ApiUsageStat {
+  id          BigInt   @id @default(autoincrement())
+  granularity String   @db.VarChar(2)
+  bucketStart DateTime @map("bucket_start") @db.Timestamptz(6)
+  method      String   @db.VarChar(10)
+  route       String   @db.VarChar(180)
+
+  hits      Int    @default(0)
+  errors4xx Int    @default(0) @map("errors_4xx")
+  errors5xx Int    @default(0) @map("errors_5xx")
+  // SUM of durations, never an average — averages can't be re-aggregated across
+  // buckets, sum + hits can. avg = totalMs / hits.
+  totalMs   BigInt @default(0) @map("total_ms")
+  maxMs     Int    @default(0) @map("max_ms")
+
+  // Latency histogram. Each column is the count of requests falling in the band
+  // (previous bound, this bound] in ms. Bands re-aggregate by summing, which is
+  // what makes approximate percentiles possible over any time range — a stored
+  // p95 could not be rolled up. Same trick Prometheus histograms use.
+  ms50   Int @default(0)
+  ms100  Int @default(0)
+  ms250  Int @default(0)
+  ms500  Int @default(0)
+  ms1000 Int @default(0)
+  ms2500 Int @default(0)
+  msInf  Int @default(0) @map("ms_inf")
+
+  // Peak requests-per-second for THIS endpoint within the bucket — the burstiest
+  // single second, not the average. Rolls up via MAX (max of per-child peaks is
+  // the true peak), so an hourly row shows the worst second in that whole hour.
+  peakRps Int @default(0) @map("peak_rps")
+
+  @@unique([granularity, bucketStart, method, route])
+  @@index([granularity, bucketStart(sort: Desc)])
+  @@index([route, granularity, bucketStart(sort: Desc)])
+  @@map("api_usage_stats")
+}
+
+// Who is calling the API, rolled up per day. Kept separate from ApiUsageStat
+// and at day granularity on purpose: users × routes × 5-min buckets would
+// multiply into millions of rows for a question ("who is hammering the API?")
+// that only ever needs daily resolution.
+//
+// userId 0 means unauthenticated (public /v1 ingestion, tracking pixels, 401s).
+// A real NULL would break the upsert — Postgres treats NULLs as distinct in a
+// unique index, so every flush would insert another anonymous row.
+model ApiUsageUserDaily {
+  id  BigInt   @id @default(autoincrement())
+  day DateTime @db.Date
+
+  // Which customer the caller belongs to. Required now that API usage is a
+  // PLATFORM view rather than a per-customer one: user id 5 is a different
+  // person at every customer, so without this the daily rows would silently
+  // merge unrelated people into one line. 0 = unattributed (public ingestion,
+  // tracking pixels, 401s, and rows written before this column existed).
+  tenantId Int @default(0) @map("tenant_id")
+
+  userId  BigInt @map("user_id")
+  hits    Int    @default(0)
+  errors  Int    @default(0)
+  totalMs BigInt @default(0) @map("total_ms")
+
+  @@unique([day, tenantId, userId])
+  @@index([day(sort: Desc)])
+  @@index([tenantId, day(sort: Desc)])
+  @@map("api_usage_user_daily")
+}
+
+// Per-endpoint error breakdown by HTTP status code. Only error responses
+// (status >= 400) are recorded here — a 200 needs no explanation, so storing a
+// row per successful status would just bloat the table. This is what powers the
+// "click an endpoint's error count → see WHICH errors" drill-down.
+//
+// Status codes are a small fixed set, so (route × status) stays bounded. Rolled
+// up m5 → h1 → d1 alongside ApiUsageStat.
+model ApiUsageStatus {
+  id          BigInt   @id @default(autoincrement())
+  granularity String   @db.VarChar(2)
+  bucketStart DateTime @map("bucket_start") @db.Timestamptz(6)
+  method      String   @db.VarChar(10)
+  route       String   @db.VarChar(180)
+  status      Int
+  count       Int      @default(0)
+
+  @@unique([granularity, bucketStart, method, route, status])
+  @@index([granularity, route, method, bucketStart(sort: Desc)])
+  @@index([granularity, bucketStart(sort: Desc)])
+  @@map("api_usage_status")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// B2B SALES CORE
+//
+// Everything below is NEW. Not one existing model is modified, and no existing
+// column changes type or nullability — which is the whole point. The education
+// customer (Tutelage) gets these tables created empty in their schema and never
+// writes a row to them, because the `accounts` feature is off for them and the
+// API mounts are gated on it.
+//
+// WHY NOT REUSE lead_notes / lead_followups / student_documents
+//
+// Because their `lead_id` is NOT NULL with a foreign key to `leads`. Storing an
+// account-owned note there would mean making that column nullable, which changes
+// the Prisma type on ~dozens of existing call sites and quietly turns a
+// guaranteed value into an optional one across Tutelage's whole lead surface.
+// A new polymorphic table costs one CREATE TABLE and risks nothing.
+//
+// The one exception is `Task` (tbl_todolist), which today has NO owner columns
+// at all — adding two nullable ones there is pure addition and is done in place.
+//
+// THE POLYMORPHIC OWNER
+//
+// `entityType` + `entityId` instead of a foreign key, so one notes table, one
+// tags table and one timeline serve accounts, contacts, deals and leads alike.
+// The cost is no referential integrity, and it is a real one, accepted because
+// the alternative is five near-identical tables per entity.
+//
+// HOW THAT COST IS CURRENTLY CONTAINED — and where it is not:
+//   • Writes validate the pair against entityExists() in config/crm-entities.ts,
+//     so a typo'd entityType or a missing row is refused rather than written.
+//   • Deleting an account is SOFT (trash = 1), so nothing is orphaned today.
+//   • There is NO hard-delete path for an account, and therefore no cascade
+//     service. If one is ever added it MUST delete the account's activities,
+//     notes, tag links and custom-field values by (entityType, entityId) — the
+//     database will not do it, because there is no foreign key to cascade
+//     along. scripts/seed-b2b-demo.ts --wipe does exactly this by hand and is
+//     the reference for the order things must be removed in.
+//
+// Valid entityType values live in ENTITY_TYPES in src/config/crm-entities.ts.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// One organisation. The B2B core entity — a company, hotel, hospital, school,
+/// or an individual buying in their own name (accountType = "individual").
+///
+/// Deliberately small. Anything industry-specific — rooms for a hotel, beds for
+/// a hospital, campuses for a school — is a custom field, never a column here.
+/// That constraint is what stops this table growing a hundred columns the way
+/// `leads` did.
+model Account {
+  id            BigInt  @id @default(autoincrement())
+  /// Human-facing reference, e.g. "ACC-000142". Assigned on create.
+  accountNumber String? @unique @map("account_number") @db.VarChar(30)
+  name          String  @db.VarChar(180)
+  legalName     String? @map("legal_name") @db.VarChar(180)
+
+  /// Both are config TABLES, not enums, so a new business type or industry is a
+  /// row an admin adds — never a migration.
+  accountTypeId BigInt? @map("account_type_id")
+  industryId    BigInt? @map("industry_id")
+
+  /// prospect | active | inactive | churned
+  status        String   @default("prospect") @db.VarChar(24)
+  /// b2b | b2c | b2b2c | d2c | marketplace | saas | services | manufacturing | retail | wholesale | subscription
+  businessModel String?  @map("business_model") @db.VarChar(24)
+  employeeCount Int?     @map("employee_count")
+  annualRevenue Decimal? @map("annual_revenue") @db.Decimal(18, 2)
+  foundedYear   Int?     @map("founded_year")
+
+  website  String? @db.VarChar(255)
+  linkedin String? @db.VarChar(255)
+  email    String? @db.VarChar(150)
+  phone    String? @db.VarChar(40)
+  whatsapp String? @db.VarChar(40)
+  logoUrl  String? @map("logo_url") @db.VarChar(255)
+
+  // ── Registration. Optional for everyone: a small customer may have none of it.
+  gstin          String? @db.VarChar(20)
+  pan            String? @db.VarChar(20)
+  cin            String? @db.VarChar(30)
+  legalStructure String? @map("legal_structure") @db.VarChar(40)
+  billingState   String? @map("billing_state") @db.VarChar(100)
+
+  creditLimit   Decimal?  @map("credit_limit") @db.Decimal(18, 2)
+  creditDays    Int?      @map("credit_days")
+  priceListId   BigInt?   @map("price_list_id")
+  /// green | amber | red — derived and stored so the list can filter without a join.
+  health        String?   @db.VarChar(16)
+  lastOrderedAt DateTime? @map("last_ordered_at")
+  replenishDays Int?      @map("replenish_days")
+
+  ownerId     BigInt? @map("owner_id")
+  branchId    BigInt? @map("branch_id")
+  createdById BigInt? @map("created_by_id")
+
+  notes String?
+  /// Soft delete, matching how `leads` does it — nothing in this CRM hard-deletes.
+  trash Int     @default(0) @db.SmallInt
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  accountType AccountType? @relation(fields: [accountTypeId], references: [id])
+  industry    Industry?    @relation(fields: [industryId], references: [id])
+  owner       User?        @relation("AccountOwner", fields: [ownerId], references: [id])
+  createdBy   User?        @relation("AccountCreator", fields: [createdById], references: [id])
+
+  locations    CrmLocation[]
+  contacts     Contact[]
+  priceList    PriceList?    @relation(fields: [priceListId], references: [id])
+  shipments    Shipment[]
+  creditNotes  CreditNote[]
+  approvals    SalesApproval[]
+
+  @@index([trash, name])
+  @@index([ownerId, trash])
+  @@index([accountTypeId])
+  @@index([industryId])
+  @@index([gstin])
+  @@index([priceListId])
+  @@index([createdAt(sort: Desc)])
+  @@map("crm_accounts")
+}
+
+/// What kind of organisation this is: Company, Hotel, Hospital, School, IT
+/// Company, Individual, NGO… A row, not an enum, so tomorrow's "Cloud Kitchen"
+/// is an insert rather than a migration against every deployed database.
+model AccountType {
+  id       BigInt  @id @default(autoincrement())
+  name     String  @db.VarChar(80)
+  slug     String  @unique @db.VarChar(80)
+  priority Int     @default(0)
+  active   Boolean @default(true)
+
+  accounts Account[]
+
+  @@map("crm_account_types")
+}
+
+/// Industry, self-referencing so a sub-industry is just a child row.
+model Industry {
+  id       BigInt  @id @default(autoincrement())
+  name     String  @db.VarChar(100)
+  slug     String  @unique @db.VarChar(100)
+  parentId BigInt? @map("parent_id")
+  priority Int     @default(0)
+  active   Boolean @default(true)
+
+  parent   Industry?  @relation("IndustryTree", fields: [parentId], references: [id])
+  children Industry[] @relation("IndustryTree")
+  accounts Account[]
+
+  @@index([parentId])
+  @@map("crm_industries")
+}
+
+/// One of an account's places. A company is rarely one address: head office,
+/// branches, warehouses, a hotel's individual properties, billing vs shipping.
+model CrmLocation {
+  id        BigInt @id @default(autoincrement())
+  accountId BigInt @map("account_id")
+  name      String @db.VarChar(150)
+  /// head_office | branch | warehouse | factory | store | property | registered | billing | shipping
+  type      String @default("branch") @db.VarChar(24)
+
+  address String? @db.Text
+  city    String? @db.VarChar(100)
+  state   String? @db.VarChar(100)
+  country String? @db.VarChar(100)
+  pincode String? @db.VarChar(20)
+
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+
+  phone String? @db.VarChar(40)
+  email String? @db.VarChar(150)
+
+  isPrimary Boolean  @default(false) @map("is_primary")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contacts Contact[]
+
+  @@index([accountId])
+  @@map("crm_locations")
+}
+
+/// A person. One account routinely has dozens, which is exactly why this is its
+/// own table and not a column on the account.
+model Contact {
+  id         BigInt  @id @default(autoincrement())
+  accountId  BigInt? @map("account_id")
+  /// Which of the account's places this person sits at.
+  locationId BigInt? @map("location_id")
+
+  firstName String  @map("first_name") @db.VarChar(80)
+  lastName  String? @map("last_name") @db.VarChar(80)
+
+  jobTitle   String? @map("job_title") @db.VarChar(120)
+  department String? @db.VarChar(80)
+  /// c_level | vp | director | manager | executive | other
+  seniority  String? @db.VarChar(24)
+
+  email         String? @db.VarChar(150)
+  personalEmail String? @map("personal_email") @db.VarChar(150)
+  mobile        String? @db.VarChar(40)
+  whatsapp      String? @db.VarChar(40)
+  officePhone   String? @map("office_phone") @db.VarChar(40)
+  linkedin      String? @db.VarChar(255)
+
+  /// call | email | whatsapp | meeting
+  preferredChannel String? @map("preferred_channel") @db.VarChar(20)
+  language         String? @db.VarChar(40)
+
+  /// decision_maker | influencer | approver | buyer | user | finance | technical | procurement | gatekeeper | unknown
+  role                 String @default("unknown") @db.VarChar(24)
+  /// unknown | new | weak | good | strong | champion
+  ///
+  /// Kept on the contact rather than per-deal: "how well do we know this
+  /// person" is a fact about the relationship, not about one opportunity.
+  relationshipStrength String @default("unknown") @map("relationship_strength") @db.VarChar(16)
+
+  /// active | inactive | left_company | do_not_contact
+  status  String  @default("active") @db.VarChar(20)
+  ownerId BigInt? @map("owner_id")
+  notes   String?
+  trash   Int     @default(0) @db.SmallInt
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  account  Account?     @relation(fields: [accountId], references: [id])
+  location CrmLocation? @relation(fields: [locationId], references: [id])
+  owner    User?        @relation("ContactOwner", fields: [ownerId], references: [id])
+
+  @@index([accountId, trash])
+  @@index([trash, lastName])
+  @@index([email])
+  @@index([mobile])
+  @@map("crm_contacts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Polymorphic satellites — one table each, serving every entity type.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// THE TIMELINE. Section 27 of the brief, and the heart of the product.
+///
+/// Append-only. Every call, email, WhatsApp, meeting, note, task and stage
+/// change lands here so an account or lead page can render its entire history
+/// from ONE ordered query instead of merging six tables in application code.
+///
+/// `meta` is JSON because a call's payload (duration, recording, outcome) and a
+/// stage change's payload (from, to) have nothing in common and never will.
+///
+/// `sourceType` + `sourceId` name the row this was projected from — a call_logs
+/// id, a lead_followups id — and are UNIQUE together so re-running a projection
+/// updates rather than duplicating.
+model Activity {
+  id         BigInt @id @default(autoincrement())
+  entityType String @map("entity_type") @db.VarChar(20)
+  entityId   BigInt @map("entity_id")
+
+  /// call | email | whatsapp | meeting | note | task | followup | stage_change | quote | payment | system
+  kind    String  @db.VarChar(24)
+  subject String? @db.VarChar(255)
+  body    String?
+
+  actorId    BigInt?  @map("actor_id")
+  occurredAt DateTime @map("occurred_at")
+  meta       Json?
+
+  sourceType String? @map("source_type") @db.VarChar(30)
+  sourceId   BigInt? @map("source_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("ActivityActor", fields: [actorId], references: [id])
+
+  @@unique([sourceType, sourceId])
+  @@index([entityType, entityId, occurredAt(sort: Desc)])
+  @@index([actorId, occurredAt(sort: Desc)])
+  @@map("crm_activities")
+}
+
+/// Notes against anything. Separate from `lead_notes`, which stays exactly as
+/// it is for the education side — see the header of this section.
+model CrmNote {
+  id         BigInt @id @default(autoincrement())
+  entityType String @map("entity_type") @db.VarChar(20)
+  entityId   BigInt @map("entity_id")
+  userId     BigInt @map("user_id")
+
+  /// general | sales | meeting | financial | internal
+  kind   String  @default("general") @db.VarChar(24)
+  body   String
+  pinned Boolean @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation("CrmNoteAuthor", fields: [userId], references: [id])
+
+  @@index([entityType, entityId, createdAt(sort: Desc)])
+  @@map("crm_notes")
+}
+
+/// A free-form label on anything. Unlimited, searchable, filterable.
+model CrmTag {
+  id        BigInt   @id @default(autoincrement())
+  name      String   @db.VarChar(60)
+  slug      String   @unique @db.VarChar(60)
+  color     String?  @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  links CrmTagLink[]
+
+  @@map("crm_tags")
+}
+
+model CrmTagLink {
+  id         BigInt   @id @default(autoincrement())
+  tagId      BigInt   @map("tag_id")
+  entityType String   @map("entity_type") @db.VarChar(20)
+  entityId   BigInt   @map("entity_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tag CrmTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, entityType, entityId])
+  @@index([entityType, entityId])
+  @@map("crm_tag_links")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom fields.
+//
+// The load-bearing piece: this is what lets "Hotel → Rooms: 120" and
+// "Hospital → Beds: 250" live in the same CRM without a migration, and it is
+// why Account above is deliberately small.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One admin-defined field on one entity type.
+model CustomFieldDef {
+  id         BigInt @id @default(autoincrement())
+  entityType String @map("entity_type") @db.VarChar(20)
+  /// snake_case, unique per entity type. Immutable once values exist.
+  key        String @db.VarChar(60)
+  label      String @db.VarChar(120)
+
+  /// text | longtext | number | currency | percent | date | datetime | select
+  /// | multiselect | boolean | email | phone | url
+  type String @db.VarChar(20)
+
+  /// For select / multiselect: ["Yes","No"]. Ignored for every other type.
+  options Json?
+
+  required Boolean @default(false)
+
+  /// Conditional visibility, e.g. { "accountType": ["hotel","hospital"] }.
+  /// Absent means "always shown". This is what keeps a hotel's fields off a
+  /// hospital's form without either being a separate entity.
+  appliesWhen Json? @map("applies_when")
+
+  /// Groups fields under a heading on the form.
+  section   String? @db.VarChar(60)
+  helpText  String? @map("help_text") @db.VarChar(255)
+  sortOrder Int     @default(0) @map("sort_order")
+
+  /// File-specific rules when type == 'file'
+  fileConfig  Json?    @map("file_config")
+  showInTable Boolean  @default(false) @map("show_in_table")
+  showInQuick Boolean  @default(false) @map("show_in_quick")
+  readOnly    Boolean  @default(false) @map("read_only")
+
+  /// Retiring a field hides it and keeps every value, matching how lead-field
+  /// visibility already works. Nothing in this CRM deletes collected data.
+  active    Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  values CustomFieldValue[]
+
+  @@unique([entityType, key])
+  @@index([entityType, active, sortOrder])
+  @@map("crm_custom_field_defs")
+}
+
+/// One value of one custom field on one record.
+///
+/// Typed columns rather than a single JSON blob, so filtering and sorting on a
+/// custom field stays an ordinary indexed query. A JSON blob would have made
+/// "every hotel with more than 100 rooms" a sequential scan.
+model CustomFieldValue {
+  id         BigInt @id @default(autoincrement())
+  defId      BigInt @map("def_id")
+  entityType String @map("entity_type") @db.VarChar(20)
+  entityId   BigInt @map("entity_id")
+
+  valueText String?   @map("value_text")
+  valueNum  Decimal?  @map("value_num") @db.Decimal(18, 4)
+  valueDate DateTime? @map("value_date")
+  valueBool Boolean?  @map("value_bool")
+  /// multiselect only.
+  valueJson Json?     @map("value_json")
+
+  fileUrl  String? @map("file_url") @db.Text
+  fileName String? @map("file_name") @db.VarChar(255)
+  fileSize Int?    @map("file_size")
+  mimeType String? @map("mime_type") @db.VarChar(100)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  def CustomFieldDef @relation(fields: [defId], references: [id], onDelete: Cascade)
+
+  @@unique([defId, entityType, entityId])
+  @@index([entityType, entityId])
+  @@index([defId, valueNum])
+  @@index([defId, valueText])
+  @@map("crm_custom_field_values")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DEALS — the sales pipeline.
+//
+// Phase 2. All new tables again; nothing existing is modified.
+//
+// WHY PIPELINES ARE ROWS
+//
+// "Software Sales" and "Hotel Sales" are not two code paths, they are two rows
+// with different stages under them. Hard-coding stages would mean a migration
+// every time a customer renames one, and renaming a stage is the single most
+// common thing a sales manager does in their first week.
+//
+// WHY A DEAL IS NOT A LEAD
+//
+// One account has many opportunities over time — a licence this year, an
+// upgrade next year, support renewals in between. Modelling that as lead
+// statuses would mean either one lead mutating forever (losing the history of
+// each sale) or duplicate leads for the same company (losing the account).
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// A named sales process. A customer can run several — enterprise vs SMB, or
+/// software vs services — and each has its own stages.
+model Pipeline {
+  id        BigInt   @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  slug      String   @unique @db.VarChar(100)
+  /// Where new deals land when nobody picks. Exactly one should be true; the
+  /// API demotes the others when one is set.
+  isDefault Boolean  @default(false) @map("is_default")
+  priority  Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  stages PipelineStage[]
+  deals  Deal[]
+
+  @@map("crm_pipelines")
+}
+
+/// One column of the board.
+model PipelineStage {
+  id         BigInt @id @default(autoincrement())
+  pipelineId BigInt @map("pipeline_id")
+  name       String @db.VarChar(100)
+  slug       String @db.VarChar(100)
+
+  /// 0–100. What the weighted pipeline multiplies each deal's value by, so a
+  /// forecast is not just the sum of everything anybody ever opened.
+  probability Int @default(0)
+  sortOrder   Int @default(0) @map("sort_order")
+
+  /// Terminal stages. Two booleans rather than one enum because a pipeline can
+  /// have several of each — "Won", "Won (Upsell)", "Lost to competitor",
+  /// "Lost — no budget" — and reporting only cares which side.
+  isWon  Boolean @default(false) @map("is_won")
+  isLost Boolean @default(false) @map("is_lost")
+
+  active Boolean @default(true)
+
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  deals    Deal[]
+
+  @@unique([pipelineId, slug])
+  @@index([pipelineId, sortOrder])
+  @@map("crm_pipeline_stages")
+}
+
+/// Why a deal was lost. A config table, so a sales manager can add one without
+/// a migration — and so "why do we lose?" is a GROUP BY rather than a read of
+/// three hundred free-text notes.
+model LostReason {
+  id       BigInt  @id @default(autoincrement())
+  name     String  @db.VarChar(120)
+  slug     String  @unique @db.VarChar(120)
+  priority Int     @default(0)
+  active   Boolean @default(true)
+
+  deals Deal[]
+
+  @@map("crm_lost_reasons")
+}
+
+/// One sales opportunity against an account.
+model Deal {
+  id         BigInt  @id @default(autoincrement())
+  dealNumber String? @unique @map("deal_number") @db.VarChar(30)
+  name       String  @db.VarChar(200)
+
+  accountId        BigInt? @map("account_id")
+  primaryContactId BigInt? @map("primary_contact_id")
+
+  pipelineId BigInt @map("pipeline_id")
+  stageId    BigInt @map("stage_id")
+
+  ownerId BigInt? @map("owner_id")
+
+  value    Decimal? @db.Decimal(18, 2)
+  currency String   @default("INR") @db.VarChar(10)
+
+  /// Overrides the stage's probability when a rep knows better. NULL means "use
+  /// the stage's", which is what almost every deal should do — a per-deal number
+  /// nobody maintains is worse than a stage default everybody understands.
+  probability Int? @db.SmallInt
+
+  expectedCloseDate DateTime? @map("expected_close_date") @db.Date
+  actualCloseDate   DateTime? @map("actual_close_date") @db.Date
+
+  source   String? @db.VarChar(100)
+  campaign String? @db.VarChar(255)
+  /// The one thing that has to happen next. Free text on purpose: a structured
+  /// task is `Task`; this is the line a manager scans down the board for.
+  nextStep String? @map("next_step") @db.VarChar(255)
+
+  lostReasonId BigInt? @map("lost_reason_id")
+  lostNotes    String? @map("lost_notes")
+
+  /// Where this came from, when it was converted rather than created by hand.
+  leadId      BigInt? @map("lead_id")
+  branchId    BigInt? @map("branch_id")
+  createdById BigInt? @map("created_by_id")
+
+  notes String?
+  trash Int     @default(0) @db.SmallInt
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  pipeline   Pipeline      @relation(fields: [pipelineId], references: [id])
+  stage      PipelineStage @relation(fields: [stageId], references: [id])
+  lostReason LostReason?   @relation(fields: [lostReasonId], references: [id])
+  owner      User?         @relation("DealOwner", fields: [ownerId], references: [id])
+  createdBy  User?         @relation("DealCreator", fields: [createdById], references: [id])
+
+  products DealProduct[]
+
+  @@index([trash, stageId])
+  @@index([accountId, trash])
+  @@index([ownerId, trash])
+  @@index([pipelineId, trash])
+  @@index([expectedCloseDate])
+  @@map("crm_deals")
+}
+
+/// The catalogue a deal's line items are picked from.
+model Product {
+  id               BigInt   @id @default(autoincrement())
+  name             String   @db.VarChar(180)
+  sku              String?  @unique @db.VarChar(60)
+  barcode          String?  @db.VarChar(60)
+  category         String?  @db.VarChar(80)
+  collection       String?  @db.VarChar(80)
+  brand            String?  @db.VarChar(80)
+  description      String?  @db.Text
+  shortDescription String?  @map("short_description") @db.VarChar(280)
+  imageUrl         String?  @map("image_url") @db.Text
+  gallery          Json?
+  videoUrl         String?  @map("video_url") @db.VarChar(500)
+  unit             String   @default("pcs") @db.VarChar(20)
+  hsnCode          String?  @map("hsn_code") @db.VarChar(20)
+
+  costPrice       Decimal  @default(0) @map("cost_price") @db.Decimal(18, 2)
+  unitPrice       Decimal? @map("unit_price") @db.Decimal(18, 2)
+  minSellingPrice Decimal? @map("min_selling_price") @db.Decimal(18, 2)
+  taxPercent      Decimal? @map("tax_percent") @db.Decimal(6, 3)
+  currency        String   @default("INR") @db.VarChar(10)
+
+  stockQuantity    Decimal @default(0) @map("stock_quantity") @db.Decimal(12, 3)
+  reservedQuantity Decimal @default(0) @map("reserved_quantity") @db.Decimal(12, 3)
+  minStockLevel    Decimal @default(5) @map("min_stock_level") @db.Decimal(12, 3)
+  allowBackorder   Boolean @default(false) @map("allow_backorder")
+  isKit            Boolean @default(false) @map("is_kit")
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  dealProducts   DealProduct[]
+  stockMovements StockMovement[]
+  kitComponents  ProductKitItem[]     @relation("KitParent")
+  kitParents     ProductKitItem[]     @relation("KitChild")
+  branchStock    ProductBranchStock[]
+  priceListItems PriceListItem[]
+
+  @@index([active, name])
+  @@index([category])
+  @@index([collection])
+  @@map("crm_products")
+}
+
+/// One line on a deal.
+///
+/// `name`, `sku`, `unitPrice` and `taxPercent` are COPIED from the product
+/// rather than read through the relation, so raising a price next year does not
+/// silently rewrite the value of every deal ever quoted at the old one. The
+/// `productId` is kept for reporting; the numbers here are the record.
+model DealProduct {
+  id        BigInt  @id @default(autoincrement())
+  dealId    BigInt  @map("deal_id")
+  productId BigInt? @map("product_id")
+
+  name String  @db.VarChar(180)
+  sku  String? @db.VarChar(60)
+
+  quantity        Decimal @default(1) @db.Decimal(12, 3)
+  unitPrice       Decimal @default(0) @map("unit_price") @db.Decimal(18, 2)
+  discountPercent Decimal @default(0) @map("discount_percent") @db.Decimal(6, 3)
+  taxPercent      Decimal @default(0) @map("tax_percent") @db.Decimal(6, 3)
+  /// Computed on write and stored, so a board summing fifty deals is one query
+  /// rather than fifty rounds of arithmetic in application code that could
+  /// drift from whatever the quote PDF does.
+  total           Decimal @default(0) @db.Decimal(18, 2)
+
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  deal    Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([dealId])
+  @@map("crm_deal_products")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SALES DOCUMENTS — quotes, contracts, orders, invoices and payments.
+//
+// Phase 3. New tables again; nothing existing is modified.
+//
+// WHY NOT REUSE tbl_invoicelist
+//
+// Tutelage's `Invoice` is a student FEE INSTALMENT: an amount, a due date and a
+// lead id, with no line items, no tax and no GST. A B2B tax invoice is a
+// different document — many lines, per-line tax, a running balance against
+// partial payments, and a legal number series. Bending one table to be both
+// would mean making `lead_id` nullable (changing the Prisma type at every
+// existing call site) AND leaving half the columns meaningless for each side.
+//
+// They stay separate. `financial` remains Tutelage's module; `sales_docs` is
+// Britannica's, and an education customer never sees these tables.
+//
+// THE DOCUMENT CHAIN
+//
+//   Deal ──▶ Quote ──▶ Order ──▶ Invoice ──▶ Payment
+//              └─────▶ Contract
+//
+// Every link is OPTIONAL in both directions. Plenty of businesses invoice
+// without ever raising a quote, and plenty quote without ever winning. Making
+// any of these required would force people to create paperwork that does not
+// exist just to record the thing that does.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// A priced proposal.
+model Quote {
+  id          BigInt @id @default(autoincrement())
+  quoteNumber String @unique @map("quote_number") @db.VarChar(30)
+
+  accountId BigInt? @map("account_id")
+  contactId BigInt? @map("contact_id")
+  dealId    BigInt? @map("deal_id")
+
+  /// draft | pending_approval | sent | viewed | accepted | rejected | expired | countered
+  status String @default("draft") @db.VarChar(24)
+
+  version       Int     @default(1)
+  parentQuoteId BigInt? @map("parent_quote_id")
+  counterNotes  String? @map("counter_notes") @db.Text
+  /// pending | approved | rejected | not_required
+  approvalStatus String @default("not_required") @map("approval_status") @db.VarChar(24)
+  reservedUntil  DateTime? @map("reserved_until")
+
+  issueDate  DateTime  @default(now()) @map("issue_date") @db.Date
+  validUntil DateTime? @map("valid_until") @db.Date
+
+  // Recomputed from the line items on every write, never set by a client. A
+  // total a caller can post is a total that will eventually disagree with the
+  // lines under it.
+  subtotal Decimal @default(0) @db.Decimal(18, 2)
+  discount Decimal @default(0) @db.Decimal(18, 2)
+  tax      Decimal @default(0) @db.Decimal(18, 2)
+  total    Decimal @default(0) @db.Decimal(18, 2)
+  currency String  @default("INR") @db.VarChar(10)
+
+  paymentTerms  String? @map("payment_terms") @db.VarChar(255)
+  deliveryTerms String? @map("delivery_terms") @db.VarChar(255)
+  notes         String?
+
+  ownerId     BigInt? @map("owner_id")
+  createdById BigInt? @map("created_by_id")
+
+  sentAt    DateTime? @map("sent_at")
+  viewedAt  DateTime? @map("viewed_at")
+  decidedAt DateTime? @map("decided_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  owner User? @relation("QuoteOwner", fields: [ownerId], references: [id])
+
+  items     QuoteItem[]
+  orders    Order[]
+  revisions Quote[]     @relation("QuoteRevisions")
+  parent    Quote?      @relation("QuoteRevisions", fields: [parentQuoteId], references: [id])
+  approvals SalesApproval[]
+
+  @@index([accountId])
+  @@index([dealId])
+  @@index([status, issueDate(sort: Desc)])
+  @@map("crm_quotes")
+}
+
+model QuoteItem {
+  id      BigInt @id @default(autoincrement())
+  quoteId BigInt @map("quote_id")
+
+  productId BigInt? @map("product_id")
+  name      String  @db.VarChar(180)
+  sku       String? @db.VarChar(60)
+  hsnCode   String? @map("hsn_code") @db.VarChar(20)
+
+  quantity        Decimal @default(1) @db.Decimal(12, 3)
+  unitPrice       Decimal @default(0) @map("unit_price") @db.Decimal(18, 2)
+  discountPercent Decimal @default(0) @map("discount_percent") @db.Decimal(6, 3)
+  taxPercent      Decimal @default(0) @map("tax_percent") @db.Decimal(6, 3)
+  total           Decimal @default(0) @db.Decimal(18, 2)
+
+  sortOrder Int @default(0) @map("sort_order")
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@map("crm_quote_items")
+}
+
+/// A signed agreement. Deliberately NOT a quote with a flag: a contract has its
+/// own dates, its own renewal cycle and its own document, and it outlives the
+/// deal that produced it.
+model Contract {
+  id             BigInt @id @default(autoincrement())
+  contractNumber String @unique @map("contract_number") @db.VarChar(30)
+
+  accountId BigInt? @map("account_id")
+  dealId    BigInt? @map("deal_id")
+  /// The accepted quote this contract was drawn up from, when there was one.
+  /// Orders point at contracts (crm_orders.contract_id); this closes the loop
+  /// upward so the chain can be walked from any document.
+  quoteId   BigInt? @map("quote_id")
+
+  title String  @db.VarChar(200)
+  type  String? @db.VarChar(60)
+
+  /// draft | sent | under_review | signed | active | expired | terminated
+  status String @default("draft") @db.VarChar(20)
+
+  startDate   DateTime? @map("start_date") @db.Date
+  endDate     DateTime? @map("end_date") @db.Date
+  /// When to start the renewal conversation. Separate from endDate because you
+  /// want the reminder before the thing expires, not on the day.
+  renewalDate DateTime? @map("renewal_date") @db.Date
+
+  value    Decimal? @db.Decimal(18, 2)
+  currency String   @default("INR") @db.VarChar(10)
+
+  paymentTerms String?   @map("payment_terms") @db.VarChar(255)
+  signedBy     String?   @map("signed_by") @db.VarChar(150)
+  signedAt     DateTime? @map("signed_at")
+  documentUrl  String?   @map("document_url") @db.VarChar(500)
+
+  notes   String?
+  ownerId BigInt? @map("owner_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  owner User? @relation("ContractOwner", fields: [ownerId], references: [id])
+
+  @@index([accountId])
+  @@index([dealId])
+  @@index([quoteId])
+  @@index([status])
+  @@index([renewalDate])
+  @@map("crm_contracts")
+}
+
+/// A confirmed sale.
+model Order {
+  id          BigInt @id @default(autoincrement())
+  orderNumber String @unique @map("order_number") @db.VarChar(30)
+
+  accountId  BigInt? @map("account_id")
+  contactId  BigInt? @map("contact_id")
+  dealId     BigInt? @map("deal_id")
+  quoteId    BigInt? @map("quote_id")
+  contractId BigInt? @map("contract_id")
+
+  /// draft | confirmed | packed | out_for_delivery | delivered | cancelled
+  /// `processing` is accepted as an alias of packed for rows written before this rail.
+  status String @default("confirmed") @db.VarChar(24)
+
+  courier        String?   @db.VarChar(80)
+  trackingNumber String?   @map("tracking_number") @db.VarChar(80)
+  packedAt       DateTime? @map("packed_at")
+  shippedAt      DateTime? @map("shipped_at")
+  deliveredAt    DateTime? @map("delivered_at")
+  podUrl         String?   @map("pod_url") @db.VarChar(500)
+  podNotes       String?   @map("pod_notes")
+  isSample       Boolean   @default(false) @map("is_sample")
+  promisedDate   DateTime? @map("promised_date") @db.Date
+
+  orderDate    DateTime  @default(now()) @map("order_date") @db.Date
+  deliveryDate DateTime? @map("delivery_date") @db.Date
+
+  subtotal Decimal @default(0) @db.Decimal(18, 2)
+  discount Decimal @default(0) @db.Decimal(18, 2)
+  tax      Decimal @default(0) @db.Decimal(18, 2)
+  total    Decimal @default(0) @db.Decimal(18, 2)
+  currency String  @default("INR") @db.VarChar(10)
+
+  notes   String?
+  ownerId BigInt? @map("owner_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  quote Quote? @relation(fields: [quoteId], references: [id])
+  owner User?  @relation("OrderOwner", fields: [ownerId], references: [id])
+
+  items      OrderItem[]
+  invoices   CrmInvoice[]
+  shipments  Shipment[]
+  creditNotes CreditNote[]
+  approvals  SalesApproval[]
+
+  @@index([accountId])
+  @@index([status, orderDate(sort: Desc)])
+  @@map("crm_orders")
+}
+
+model OrderItem {
+  id      BigInt @id @default(autoincrement())
+  orderId BigInt @map("order_id")
+
+  productId BigInt? @map("product_id")
+  name      String  @db.VarChar(180)
+  sku       String? @db.VarChar(60)
+  hsnCode   String? @map("hsn_code") @db.VarChar(20)
+
+  quantity        Decimal @default(1) @db.Decimal(12, 3)
+  unitPrice       Decimal @default(0) @map("unit_price") @db.Decimal(18, 2)
+  discountPercent Decimal @default(0) @map("discount_percent") @db.Decimal(6, 3)
+  taxPercent      Decimal @default(0) @map("tax_percent") @db.Decimal(6, 3)
+  total           Decimal @default(0) @db.Decimal(18, 2)
+
+  sortOrder Int @default(0) @map("sort_order")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("crm_order_items")
+}
+
+/// A B2B tax invoice. Named CrmInvoice so it cannot be confused with
+/// `Invoice` (tbl_invoicelist), which is Tutelage's student fee instalment and
+/// is left completely alone.
+model CrmInvoice {
+  id            BigInt @id @default(autoincrement())
+  invoiceNumber String @unique @map("invoice_number") @db.VarChar(30)
+
+  accountId BigInt? @map("account_id")
+  contactId BigInt? @map("contact_id")
+  dealId    BigInt? @map("deal_id")
+  orderId   BigInt? @map("order_id")
+
+  /// draft | sent | partial | paid | cancelled
+  ///
+  /// "overdue" is deliberately NOT stored: it is `status != paid AND dueDate <
+  /// today`, and a stored flag would need a nightly job to stay true. Derived
+  /// on read, so it is never stale.
+  status String @default("draft") @db.VarChar(20)
+
+  issueDate DateTime  @default(now()) @map("issue_date") @db.Date
+  dueDate   DateTime? @map("due_date") @db.Date
+
+  subtotal   Decimal @default(0) @db.Decimal(18, 2)
+  discount   Decimal @default(0) @db.Decimal(18, 2)
+  tax        Decimal @default(0) @db.Decimal(18, 2)
+  total      Decimal @default(0) @db.Decimal(18, 2)
+  /// Kept in step with the payments below on every payment write, so an ageing
+  /// report is one query rather than a sum per invoice.
+  amountPaid Decimal @default(0) @map("amount_paid") @db.Decimal(18, 2)
+  currency   String  @default("INR") @db.VarChar(10)
+
+  terms String? @db.VarChar(255)
+  notes String?
+
+  ownerId     BigInt?   @map("owner_id")
+  createdById BigInt?   @map("created_by_id")
+  sentAt      DateTime? @map("sent_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  order Order? @relation(fields: [orderId], references: [id])
+  owner User?  @relation("CrmInvoiceOwner", fields: [ownerId], references: [id])
+
+  items       CrmInvoiceItem[]
+  payments    CrmPayment[]
+  creditNotes CreditNote[]
+
+  @@index([accountId])
+  @@index([status, dueDate])
+  @@map("crm_invoices")
+}
+
+model CrmInvoiceItem {
+  id        BigInt @id @default(autoincrement())
+  invoiceId BigInt @map("invoice_id")
+
+  productId BigInt? @map("product_id")
+  name      String  @db.VarChar(180)
+  sku       String? @db.VarChar(60)
+  hsnCode   String? @map("hsn_code") @db.VarChar(20)
+
+  quantity        Decimal @default(1) @db.Decimal(12, 3)
+  unitPrice       Decimal @default(0) @map("unit_price") @db.Decimal(18, 2)
+  discountPercent Decimal @default(0) @map("discount_percent") @db.Decimal(6, 3)
+  taxPercent      Decimal @default(0) @map("tax_percent") @db.Decimal(6, 3)
+  total           Decimal @default(0) @db.Decimal(18, 2)
+
+  sortOrder Int @default(0) @map("sort_order")
+
+  invoice CrmInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("crm_invoice_items")
+}
+
+/// Money received against an invoice.
+model CrmPayment {
+  id        BigInt @id @default(autoincrement())
+  invoiceId BigInt @map("invoice_id")
+
+  amount      Decimal  @db.Decimal(18, 2)
+  paymentDate DateTime @map("payment_date") @db.Date
+  /// cash | cheque | bank_transfer | upi | card | other
+  mode        String   @default("bank_transfer") @db.VarChar(24)
+
+  transactionId String? @map("transaction_id") @db.VarChar(120)
+  bank          String? @db.VarChar(120)
+  reference     String? @db.VarChar(255)
+  notes         String?
+
+  recordedById BigInt?  @map("recorded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  invoice    CrmInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  recordedBy User?      @relation("CrmPaymentRecorder", fields: [recordedById], references: [id])
+
+  @@index([invoiceId])
+  @@index([paymentDate(sort: Desc)])
+  @@map("crm_payments")
+}
+
+/// The business side of a lead — company name, and where it went once
+/// converted.
+///
+/// WHY A SIDE TABLE AND NOT COLUMNS ON `leads`
+///
+/// Prisma's generated client selects every scalar field on a model. A
+/// `company_name` in schema.prisma that is missing from `public.leads` would
+/// break EVERY Tutelage lead query the moment this shipped — so lead columns
+/// can never be rolled out to one customer at a time. They would have to go to
+/// the 63,000-row live education table too.
+///
+/// A `crm_*` table can be migrated with `--only=britannica_bots` and Tutelage
+/// never receives it at all. `leads` is not touched: the relation below adds a
+/// Prisma-level field to Lead and no column to the table.
+///
+/// It is also the right home for anything else B2B a lead needs later —
+/// industry, employee count, deal size — without ever reopening that question.
+model LeadBusiness {
+  id     BigInt @id @default(autoincrement())
+  leadId BigInt @unique @map("lead_id")
+
+  /// The company this enquiry is from. On a B2B lead this matters more than the
+  /// person's name, which is why it is the first thing the lead page shows.
+  companyName String? @map("company_name") @db.VarChar(180)
+  designation String? @db.VarChar(120)
+  website     String? @db.VarChar(255)
+
+  /// What they actually want built. On an IT sales lead this is the enquiry —
+  /// "Inventory & POS rollout for 40 stores" — and knowing it is the difference
+  /// between a name in a list and a lead somebody can price.
+  ///
+  /// Here rather than on `Lead` for the reason this table exists: every tenant
+  /// schema is migrated from one schema.prisma, and Prisma SELECTs every scalar
+  /// it knows about, so a column added to `leads` for one customer throws on
+  /// every query for the others. crm_lead_business is empty in the education
+  /// schema and its relation is optional, so nothing there notices.
+  projectTitle       String? @map("project_title") @db.VarChar(200)
+  projectDescription String? @map("project_description") @db.Text
+
+  // ── Set by the conversion, and the reason this table exists at all: before,
+  //    "which account did this lead become?" was only answerable by parsing the
+  //    meta JSON on an activity row, which is not a link, it is a rumour.
+  accountId   BigInt?   @map("account_id")
+  contactId   BigInt?   @map("contact_id")
+  dealId      BigInt?   @map("deal_id")
+  convertedAt DateTime? @map("converted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([companyName])
+  @@map("crm_lead_business")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Projects & proposals.
+//
+// An IT-sales enquiry is a PROJECT before it is a deal: "build us a POS for 40
+// stores". The rep who took the call cannot price it alone — it goes to the IT
+// team, or to Digital Marketing, or to Design, and somebody there writes the
+// proposal. That back-and-forth, and then the same proposal going out to the
+// client by email and the client's replies coming back, is what these tables
+// hold.
+//
+// TWO CHANNELS ON ONE THREAD
+//
+//   internal — the rep and the assigned team member, inside the CRM only
+//   external — what was sent to the client, and every reply that came back
+//
+// Both live in crm_project_messages, told apart by `channel`, so the page
+// renders one story in order. A reply from the client is matched back to its
+// project by the RFC Message-ID chain (In-Reply-To / References) and, failing
+// that, by the [PRJ-000012] token every outgoing subject carries.
+//
+// TEAMS ARE THEIR OWN TABLE, NOT `lead_departments`. A lead department is a
+// pipeline scope (Sales, Pre-Sales) that decides which statuses a lead can be
+// in. A team is who does the work (IT, Digital Marketing) — people, not
+// statuses — and a user can sit in several.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A department that projects get assigned to: IT, Digital Marketing, Design…
+/// Rows, not an enum, so a new department is an insert rather than a migration.
+model CrmTeam {
+  id          BigInt   @id @default(autoincrement())
+  name        String   @db.VarChar(100)
+  slug        String   @unique @db.VarChar(100)
+  description String?  @db.VarChar(255)
+  color       String?  @db.VarChar(20)
+  priority    Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  members  CrmTeamMember[]
+  projects CrmProject[]
+
+  @@map("crm_teams")
+}
+
+model CrmTeamMember {
+  id        BigInt   @id @default(autoincrement())
+  teamId    BigInt   @map("team_id")
+  userId    BigInt   @map("user_id")
+  /// lead | member — a team lead is who gets the project when nobody is named.
+  role      String   @default("member") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  team CrmTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User    @relation("TeamMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@map("crm_team_members")
+}
+
+/// The project itself — the brief, who it is for, which team has it, and where
+/// the proposal stands.
+model CrmProject {
+  id            BigInt  @id @default(autoincrement())
+  projectNumber String? @unique @map("project_number") @db.VarChar(30)
+  title         String  @db.VarChar(200)
+  /// One or two lines: what this is, for the list view.
+  summary       String? @db.VarChar(500)
+  /// The full brief — scope, stack, integrations, timeline, budget.
+  description   String? @db.Text
+
+  /// Where it came from. All optional: a project can start from a lead, an
+  /// account, or nothing at all.
+  leadId    BigInt? @map("lead_id")
+  accountId BigInt? @map("account_id")
+  contactId BigInt? @map("contact_id")
+  dealId    BigInt? @map("deal_id")
+
+  /// Who does the work.
+  teamId      BigInt? @map("team_id")
+  assigneeId  BigInt? @map("assignee_id")
+  /// The rep who owns the relationship — the one who talks to the client.
+  ownerId     BigInt? @map("owner_id")
+  createdById BigInt? @map("created_by_id")
+
+  /// draft | assigned | in_review | proposal_ready | sent_to_client |
+  /// client_replied | approved | rejected | on_hold | closed
+  status   String @default("draft") @db.VarChar(24)
+  /// low | medium | high | urgent
+  priority String @default("medium") @db.VarChar(12)
+
+  budget   Decimal?  @db.Decimal(18, 2)
+  currency String    @default("INR") @db.VarChar(10)
+  dueDate  DateTime? @map("due_date") @db.Date
+
+  /// Where the external thread goes. Defaults from the contact or the lead.
+  clientName  String? @map("client_name") @db.VarChar(160)
+  clientEmail String? @map("client_email") @db.VarChar(200)
+  clientCc    String? @map("client_cc") @db.VarChar(500)
+  /// Which mailbox (campaign_groups) sends the external thread. NULL sends
+  /// from the platform SMTP account, whose replies are not polled.
+  mailGroupId BigInt? @map("mail_group_id")
+
+  /// Whose turn it is. Set on every message: a note from the assignee hands
+  /// the ball to the owner, a note from the owner hands it to the assignee, a
+  /// client reply hands it to the owner. This is what the bell reads.
+  ballWithUserId    BigInt?   @map("ball_with_user_id")
+  lastInternalAt    DateTime? @map("last_internal_at")
+  lastExternalAt    DateTime? @map("last_external_at")
+  lastClientReplyAt DateTime? @map("last_client_reply_at")
+  sentToClientAt    DateTime? @map("sent_to_client_at")
+  closedAt          DateTime? @map("closed_at")
+
+  trash     Int      @default(0) @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  team      CrmTeam? @relation(fields: [teamId], references: [id])
+  assignee  User?    @relation("ProjectAssignee", fields: [assigneeId], references: [id])
+  owner     User?    @relation("ProjectOwner", fields: [ownerId], references: [id])
+  createdBy User?    @relation("ProjectCreator", fields: [createdById], references: [id])
+
+  messages CrmProjectMessage[]
+  files    CrmProjectFile[]
+
+  @@index([trash, status])
+  @@index([leadId])
+  @@index([accountId])
+  @@index([teamId, trash])
+  @@index([assigneeId, trash])
+  @@index([ownerId, trash])
+  @@index([ballWithUserId, trash])
+  @@index([createdAt(sort: Desc)])
+  @@map("crm_projects")
+}
+
+/// One entry on a project's thread — internal or external, in or out.
+model CrmProjectMessage {
+  id        BigInt @id @default(autoincrement())
+  projectId BigInt @map("project_id")
+
+  /// internal | external
+  channel   String @db.VarChar(12)
+  /// out (we wrote it) | in (the client replied)
+  direction String @default("out") @db.VarChar(6)
+  /// message | assignment | status | proposal | system
+  kind      String @default("message") @db.VarChar(16)
+
+  authorId  BigInt? @map("author_id")
+  fromEmail String? @map("from_email") @db.VarChar(200)
+  fromName  String? @map("from_name") @db.VarChar(160)
+  toEmail   String? @map("to_email") @db.VarChar(500)
+  cc        String? @db.VarChar(500)
+
+  subject String? @db.VarChar(500)
+  body    String  @db.Text
+
+  /// RFC Message-ID of the mail this row is — for threading replies back.
+  messageId     String? @map("message_id") @db.VarChar(255)
+  inReplyTo     String? @map("in_reply_to") @db.VarChar(255)
+  inboundMailId BigInt? @map("inbound_mail_id")
+  sentMailId    BigInt? @map("sent_mail_id")
+
+  /// sent | failed | pending — only meaningful for outbound external mail.
+  deliveryStatus String? @map("delivery_status") @db.VarChar(12)
+  errorMessage   String? @map("error_message")
+  meta           Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project CrmProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User?            @relation("ProjectMessageAuthor", fields: [authorId], references: [id])
+  files   CrmProjectFile[]
+
+  @@index([projectId, createdAt])
+  @@index([messageId])
+  @@index([inboundMailId])
+  @@map("crm_project_messages")
+}
+
+/// A file on a project — a brief PDF, a mock-up PNG, a walkthrough video.
+/// Attached to one message when it travelled with it, or to the project alone.
+model CrmProjectFile {
+  id        BigInt  @id @default(autoincrement())
+  projectId BigInt  @map("project_id")
+  messageId BigInt? @map("message_id")
+
+  filePath String  @map("file_path") @db.VarChar(500)
+  fileName String  @map("file_name") @db.VarChar(255)
+  fileType String? @map("file_type") @db.VarChar(120)
+  fileSize BigInt? @map("file_size")
+
+  uploadedById BigInt?  @map("uploaded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  project    CrmProject         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  message    CrmProjectMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  uploadedBy User?              @relation("ProjectFileUploader", fields: [uploadedById], references: [id])
+
+  @@index([projectId])
+  @@index([messageId])
+  @@map("crm_project_files")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PRODUCT STOCK, PRICING, FULFILLMENT, APPROVALS
+// ═════════════════════════════════════════════════════════════════════════════
+
+model StockMovement {
+  id             BigInt   @id @default(autoincrement())
+  productId      BigInt   @map("product_id")
+  branchId       BigInt?  @map("branch_id")
+  /// RESTOCK | TRANSFER | RESERVE | RELEASE | DISPATCH | RETURN | ADJUSTMENT | SAMPLE
+  movementType   String   @map("movement_type") @db.VarChar(30)
+  quantity       Decimal  @db.Decimal(12, 3)
+  previousStock  Decimal  @map("previous_stock") @db.Decimal(12, 3)
+  newStock       Decimal  @map("new_stock") @db.Decimal(12, 3)
+  referenceType  String?  @map("reference_type") @db.VarChar(30)
+  referenceId    BigInt?  @map("reference_id")
+  notes          String?  @db.Text
+  createdById    BigInt?  @map("created_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("StockMovementActor", fields: [createdById], references: [id])
+
+  @@index([productId, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("crm_stock_movements")
+}
+
+model ProductBranchStock {
+  id               BigInt  @id @default(autoincrement())
+  productId        BigInt  @map("product_id")
+  branchId         BigInt  @map("branch_id")
+  stockQuantity    Decimal @default(0) @map("stock_quantity") @db.Decimal(12, 3)
+  reservedQuantity Decimal @default(0) @map("reserved_quantity") @db.Decimal(12, 3)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, branchId])
+  @@index([branchId])
+  @@map("crm_product_branch_stock")
+}
+
+model ProductKitItem {
+  id          BigInt  @id @default(autoincrement())
+  kitId       BigInt  @map("kit_id")
+  componentId BigInt  @map("component_id")
+  quantity    Decimal @default(1) @db.Decimal(12, 3)
+
+  kit       Product @relation("KitParent", fields: [kitId], references: [id], onDelete: Cascade)
+  component Product @relation("KitChild", fields: [componentId], references: [id])
+
+  @@unique([kitId, componentId])
+  @@map("crm_product_kit_items")
+}
+
+model PriceList {
+  id        BigInt   @id @default(autoincrement())
+  name      String   @db.VarChar(120)
+  slug      String   @unique @db.VarChar(80)
+  /// retail | dealer | key_account
+  kind      String   @default("retail") @db.VarChar(24)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items    PriceListItem[]
+  accounts Account[]
+
+  @@map("crm_price_lists")
+}
+
+model PriceListItem {
+  id              BigInt  @id @default(autoincrement())
+  priceListId     BigInt  @map("price_list_id")
+  productId       BigInt  @map("product_id")
+  unitPrice       Decimal @map("unit_price") @db.Decimal(18, 2)
+  minQty          Decimal @default(1) @map("min_qty") @db.Decimal(12, 3)
+  minSellingPrice Decimal? @map("min_selling_price") @db.Decimal(18, 2)
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([priceListId, productId, minQty])
+  @@map("crm_price_list_items")
+}
+
+model Shipment {
+  id             BigInt    @id @default(autoincrement())
+  orderId        BigInt    @map("order_id")
+  accountId      BigInt?   @map("account_id")
+  shipmentNumber String    @unique @map("shipment_number") @db.VarChar(30)
+  /// packed | out_for_delivery | delivered | cancelled
+  status         String    @default("packed") @db.VarChar(24)
+  courier        String?   @db.VarChar(80)
+  trackingNumber String?   @map("tracking_number") @db.VarChar(80)
+  eta            DateTime? @db.Date
+  packedAt       DateTime? @map("packed_at")
+  shippedAt      DateTime? @map("shipped_at")
+  deliveredAt    DateTime? @map("delivered_at")
+  podUrl         String?   @map("pod_url") @db.VarChar(500)
+  podNotes       String?   @map("pod_notes")
+  notes          String?
+  createdById    BigInt?   @map("created_by_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  account   Account?       @relation(fields: [accountId], references: [id])
+  createdBy User?          @relation("ShipmentCreator", fields: [createdById], references: [id])
+  items     ShipmentItem[]
+
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@map("crm_shipments")
+}
+
+model ShipmentItem {
+  id         BigInt  @id @default(autoincrement())
+  shipmentId BigInt  @map("shipment_id")
+  productId  BigInt? @map("product_id")
+  name       String  @db.VarChar(180)
+  sku        String? @db.VarChar(60)
+  quantity   Decimal @default(1) @db.Decimal(12, 3)
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+  @@map("crm_shipment_items")
+}
+
+model CreditNote {
+  id              BigInt   @id @default(autoincrement())
+  creditNoteNumber String  @unique @map("credit_note_number") @db.VarChar(30)
+  accountId       BigInt?  @map("account_id")
+  orderId         BigInt?  @map("order_id")
+  invoiceId       BigInt?  @map("invoice_id")
+  /// draft | issued | applied | cancelled
+  status          String   @default("issued") @db.VarChar(20)
+  reason          String?  @db.VarChar(40)
+  notes           String?
+  subtotal        Decimal  @default(0) @db.Decimal(18, 2)
+  tax             Decimal  @default(0) @db.Decimal(18, 2)
+  total           Decimal  @default(0) @db.Decimal(18, 2)
+  currency        String   @default("INR") @db.VarChar(10)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  account Account?    @relation(fields: [accountId], references: [id])
+  order   Order?      @relation(fields: [orderId], references: [id])
+  invoice CrmInvoice? @relation(fields: [invoiceId], references: [id])
+  items   CreditNoteItem[]
+
+  @@index([accountId])
+  @@index([orderId])
+  @@map("crm_credit_notes")
+}
+
+model CreditNoteItem {
+  id           BigInt  @id @default(autoincrement())
+  creditNoteId BigInt  @map("credit_note_id")
+  productId    BigInt? @map("product_id")
+  name         String  @db.VarChar(180)
+  sku          String? @db.VarChar(60)
+  quantity     Decimal @default(1) @db.Decimal(12, 3)
+  unitPrice    Decimal @default(0) @map("unit_price") @db.Decimal(18, 2)
+  taxPercent   Decimal @default(0) @map("tax_percent") @db.Decimal(6, 3)
+  total        Decimal @default(0) @db.Decimal(18, 2)
+
+  creditNote CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+
+  @@index([creditNoteId])
+  @@map("crm_credit_note_items")
+}
+
+model SalesApproval {
+  id           BigInt    @id @default(autoincrement())
+  /// quote | order
+  entityType   String    @map("entity_type") @db.VarChar(20)
+  entityId     BigInt    @map("entity_id")
+  accountId    BigInt?   @map("account_id")
+  quoteId      BigInt?   @map("quote_id")
+  orderId      BigInt?   @map("order_id")
+  /// discount | credit | below_floor | free_shipping
+  kind         String    @db.VarChar(24)
+  requestedPct Decimal?  @map("requested_pct") @db.Decimal(6, 3)
+  reason       String?
+  /// pending | approved | rejected
+  status       String    @default("pending") @db.VarChar(20)
+  decidedById  BigInt?   @map("decided_by_id")
+  decidedAt    DateTime? @map("decided_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  account   Account? @relation(fields: [accountId], references: [id])
+  quote     Quote?   @relation(fields: [quoteId], references: [id])
+  order     Order?   @relation(fields: [orderId], references: [id])
+  decidedBy User?    @relation("ApprovalDecider", fields: [decidedById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([entityType, entityId])
+  @@map("crm_sales_approvals")
+}
+
+model Cadence {
+  id          BigInt   @id @default(autoincrement())
+  name        String   @db.VarChar(120)
+  slug        String   @unique @db.VarChar(80)
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  steps        CadenceStep[]
+  enrollments  CadenceEnrollment[]
+
+  @@map("crm_cadences")
+}
+
+model CadenceStep {
+  id         BigInt @id @default(autoincrement())
+  cadenceId  BigInt @map("cadence_id")
+  dayOffset  Int    @map("day_offset")
+  sortOrder  Int    @default(0) @map("sort_order")
+  /// email | whatsapp | call | task
+  channel    String @db.VarChar(20)
+  eventKey   String? @map("event_key") @db.VarChar(40)
+  subject    String? @db.VarChar(200)
+  body       String? @db.Text
+
+  cadence Cadence @relation(fields: [cadenceId], references: [id], onDelete: Cascade)
+
+  @@index([cadenceId, sortOrder])
+  @@map("crm_cadence_steps")
+}
+
+model CadenceEnrollment {
+  id        BigInt    @id @default(autoincrement())
+  cadenceId BigInt    @map("cadence_id")
+  leadId    BigInt    @map("lead_id")
+  stepIndex Int       @default(0) @map("step_index")
+  nextAt    DateTime? @map("next_at")
+  /// active | paused | completed | cancelled
+  status    String    @default("active") @db.VarChar(20)
+  startedAt DateTime  @default(now()) @map("started_at")
+
+  cadence Cadence @relation(fields: [cadenceId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, status])
+  @@index([nextAt, status])
+  @@map("crm_cadence_enrollments")
+}
+

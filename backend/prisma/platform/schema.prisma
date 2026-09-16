@@ -1,0 +1,230 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM (control-plane) schema.
+//
+// This is deliberately a SECOND Prisma schema with its own generated client.
+// It lives in the `platform` Postgres schema alongside every tenant schema in
+// the same database, and it is the only schema that knows about all customers.
+//
+// The tenant schema (../schema.prisma) is copied verbatim into one Postgres
+// schema per customer; nothing in it may ever reference a model here.
+//
+//   psql: CREATE SCHEMA platform;
+//   generate: npm run platform:generate
+//   migrate:  npm run platform:migrate
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PLATFORM_DATABASE_URL")
+}
+
+enum TenantStatus {
+  active
+  suspended
+  expired
+}
+
+enum ProvisioningStatus {
+  pending
+  creating_schema
+  migrating
+  seeding
+  ready
+  failed
+}
+
+/// One paying customer. `schemaName` is the Postgres schema holding all of
+/// their CRM data — the original Tutelage install is the row with
+/// schemaName = "public" and isPrimary = true.
+model Tenant {
+  id         Int    @id @default(autoincrement())
+  slug       String @unique @db.VarChar(40)
+  schemaName String @unique @map("schema_name") @db.VarChar(63)
+
+  companyName  String  @map("company_name") @db.VarChar(150)
+  contactName  String? @map("contact_name") @db.VarChar(100)
+  contactEmail String? @map("contact_email") @db.VarChar(150)
+  contactPhone String? @map("contact_phone") @db.VarChar(30)
+  logoUrl      String? @map("logo_url") @db.VarChar(255)
+  notes        String?
+
+  status          TenantStatus @default(active)
+  suspendedReason String?      @map("suspended_reason") @db.VarChar(255)
+
+  planName      String    @default("starter") @map("plan_name") @db.VarChar(50)
+  planStartsAt  DateTime? @map("plan_starts_at")
+  planExpiresAt DateTime? @map("plan_expires_at")
+
+  provisioningStatus ProvisioningStatus @default(ready) @map("provisioning_status")
+  provisioningStep   String?            @map("provisioning_step") @db.VarChar(120)
+  provisioningError  String?            @map("provisioning_error")
+
+  // ── Limits. NULL means unlimited. Enforced centrally by the quota Prisma
+  //    extension in src/lib/tenant-quota.ts, not by scattered route checks.
+  maxUsers         Int? @map("max_users")
+  maxCounsellors   Int? @map("max_counsellors")
+  maxSubAdmins     Int? @map("max_sub_admins")
+  maxBranches      Int? @map("max_branches")
+  maxLeads         Int? @map("max_leads")
+  maxLeadsPerMonth Int? @map("max_leads_per_month")
+  maxStorageMb     Int? @map("max_storage_mb")
+
+  /// What kind of business this customer runs: "education" | "b2b_sales",
+  /// from src/config/verticals.ts.
+  ///
+  /// A plain string, not a Postgres enum, so adding a vertical is a code change
+  /// rather than a migration against every deployed database.
+  ///
+  /// This is a RECORD of which preset was applied, not a live override. The
+  /// three columns below are authoritative once provisioning has copied the
+  /// preset into them — see the header of config/verticals.ts.
+  vertical String @default("education") @db.VarChar(30)
+
+  /// { "whatsapp": true, "auto_dialer": false, ... } — keys from
+  /// src/config/features.ts. A missing key falls back to that feature's
+  /// `defaultEnabled`, so adding a module never needs a migration.
+  features Json @default("{}")
+
+  /// Per-customer renames for the nouns the UI says:
+  /// { "student": { "singular": "Client", "plural": "Clients" } }
+  ///
+  /// Keys from src/config/terminology.ts. Stores only deviations, so `{}` — what
+  /// every existing customer has — means today's wording exactly.
+  labels Json @default("{}")
+
+  /// Which Lead Information fields this customer sees:
+  /// { "hiddenGroups": ["ucat"], "hiddenFields": ["religion"] }
+  ///
+  /// Stores only the deviations from "everything visible", so an empty object
+  /// means the full form — which is what every existing customer gets, and why
+  /// this changes nothing for them. Hiding a field never touches the data:
+  /// the column keeps its values and the API keeps returning them.
+  leadFields Json @default("{}") @map("lead_fields")
+
+  /// The original install. Cannot be deleted or suspended from the UI.
+  isPrimary Boolean @default(false) @map("is_primary")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users     TenantUserDirectory[]
+  apiKeys   TenantApiKey[]
+  snapshots TenantUsageSnapshot[]
+  auditLogs PlatformAuditLog[]
+
+  @@index([status])
+  @@index([planExpiresAt])
+  @@map("tenants")
+}
+
+/// Super admin accounts. Completely separate from every tenant's `users`
+/// table — a platform token is signed with JWT_PLATFORM_SECRET and can never
+/// be replayed as a tenant token, or the reverse.
+model PlatformUser {
+  id              BigInt    @id @default(autoincrement())
+  name            String    @db.VarChar(100)
+  email           String    @unique @db.VarChar(150)
+  password        String    @db.VarChar(250)
+  status          Int       @default(1) @db.SmallInt
+  isRoot          Boolean   @default(false) @map("is_root")
+  activeSessionId String?   @map("active_session_id") @db.VarChar(64)
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  auditLogs PlatformAuditLog[]
+
+  @@map("platform_users")
+}
+
+/// Mirror of every tenant's `users` row, just the login identifiers. This is
+/// what lets ONE login page resolve which customer a person belongs to without
+/// querying every schema. Kept in sync by the directory Prisma extension in
+/// src/lib/tenant-directory.ts, and rebuildable via scripts/rebuild-directory.ts.
+model TenantUserDirectory {
+  id       BigInt @id @default(autoincrement())
+  tenantId Int    @map("tenant_id")
+  userId   BigInt @map("user_id")
+
+  loginid  String  @db.VarChar(100)
+  email    String  @db.VarChar(150)
+  username String? @db.VarChar(100)
+  name     String  @db.VarChar(100)
+  role     String  @db.VarChar(50)
+  status   Int     @default(1) @db.SmallInt
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([loginid])
+  @@index([email])
+  @@index([username])
+  @@map("tenant_user_directory")
+}
+
+/// Per-customer key for the public /v1 lead-ingestion endpoints, replacing the
+/// single shared process.env.API_KEY. Only the hash is stored.
+model TenantApiKey {
+  id         BigInt    @id @default(autoincrement())
+  tenantId   Int       @map("tenant_id")
+  name       String    @db.VarChar(100)
+  keyHash    String    @unique @map("key_hash") @db.VarChar(128)
+  keyPrefix  String    @map("key_prefix") @db.VarChar(16)
+  status     Int       @default(1) @db.SmallInt
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("tenant_api_keys")
+}
+
+/// Nightly usage counts, so the super admin overview can render without
+/// fanning a COUNT(*) out across every customer schema on page load.
+model TenantUsageSnapshot {
+  id             BigInt   @id @default(autoincrement())
+  tenantId       Int      @map("tenant_id")
+  capturedOn     DateTime @map("captured_on") @db.Date
+  users          Int      @default(0)
+  counsellors    Int      @default(0)
+  branches       Int      @default(0)
+  leads          Int      @default(0)
+  leadsThisMonth Int      @default(0) @map("leads_this_month")
+  storageMb      Int      @default(0) @map("storage_mb")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, capturedOn])
+  @@map("tenant_usage_snapshots")
+}
+
+/// Every action taken in the super admin panel, including impersonation.
+model PlatformAuditLog {
+  id             BigInt   @id @default(autoincrement())
+  platformUserId BigInt?  @map("platform_user_id")
+  actorName      String   @map("actor_name") @db.VarChar(100)
+  tenantId       Int?     @map("tenant_id")
+  action         String   @db.VarChar(60)
+  summary        String   @db.VarChar(300)
+  detail         Json?
+  ip             String?  @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  platformUser PlatformUser? @relation(fields: [platformUserId], references: [id], onDelete: SetNull)
+  tenant       Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([tenantId])
+  @@index([action])
+  @@map("platform_audit_log")
+}

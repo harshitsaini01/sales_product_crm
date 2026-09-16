@@ -1,0 +1,29 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+app/google-services.json
+app/release/
+*.jks
+*.keystore
+
+# Release signing credentials — never commit.
+keystore.properties
+.env
+.env.*
+!.env.example
+secrets/
+*-service-account.json
+
+# Built APKs. `app/release/` below never matched the real folder, which is
+# `app release/` at the repo root (note the space), so ~110 MB of binaries was
+# being tracked. Release artifacts belong on the server, not in git history.
+*.apk
+*.aab
+/app release/

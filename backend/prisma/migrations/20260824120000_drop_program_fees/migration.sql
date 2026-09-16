@@ -1,0 +1,16 @@
+-- Drop the Program Fees feature.
+--
+-- Built and wired end to end (page, sidebar entry, 5 REST endpoints, table) but
+-- never used: tbl_program_fees held 0 rows in production, and the API metrics
+-- recorded no calls to any program-fees endpoint. Removed along with its page,
+-- route, sidebar link, API client functions and the "Program Fees" tab on the
+-- university detail screen.
+--
+-- Safe: no other table references tbl_program_fees. It was the child side of
+-- its only foreign key (tbl_program_fees.university_id -> universities.id), so
+-- dropping it cannot orphan anything. Universities are untouched.
+--
+-- If this ever comes back, note the old `fees` column was VARCHAR(100) holding
+-- free text like "12,000 USD/year". A revived version should store a numeric
+-- amount and a separate currency code, so the figures can actually be summed.
+DROP TABLE IF EXISTS "tbl_program_fees";

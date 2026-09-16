@@ -1,0 +1,7 @@
+- [x] Make Status and Sub-status required in `AddFollowupDialog`
+    - [x] Update `DropdownField` labels and placeholders
+    - [x] Update "Save" button `enabled` logic
+- [x] Make Next follow-up date required in `AddFollowupDialog`
+    - [x] Update label and remove "Clear" button
+    - [x] Update "Save" button `enabled` logic
+- [x] Create walkthrough artifact
