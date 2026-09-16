@@ -170,7 +170,7 @@ export async function sendLeadCatalog(opts: {
           productId: p.id,
           name: p.name,
           description: p.description,
-          unitPrice: p.unitPrice ?? 0,
+          unitPrice: n(p.unitPrice),
           imageUrl: p.imageUrl,
         })),
       },
