@@ -7,6 +7,7 @@ import { serve } from '@hono/node-server'
 import { app } from './app'
 import { startRetentionCron } from './services/recording-retention.service'
 import { startCampaignEngine } from './services/campaign-engine.service'
+import { startInboxPoller } from './services/inbox-poller.service'
 import { startInactivityScheduler } from './services/inactivity-scheduler.service'
 import { startApiMetrics } from './services/api-metrics.service'
 import { captureUsageSnapshots } from './services/tenant-usage.service'
@@ -34,6 +35,7 @@ serve({ fetch: app.fetch, port: PORT }, (info) => {
 
   startRetentionCron()
   startCampaignEngine()
+  startInboxPoller()
   startInactivityScheduler()
   startApiMetrics()
   startUsageSnapshots()
