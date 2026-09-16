@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { communicationApi } from '@/lib/api'
-import { productsApi, type Product } from '@/lib/deals-api'
+import { productsApi, formatMoney, type Product } from '@/lib/deals-api'
 import { useAuthStore } from '@/stores/auth.store'
 import { toast } from 'sonner'
 import { Loader2, Plus, Trash2, Pencil, Image as ImageIcon, Check, X, Star, Braces } from 'lucide-react'
@@ -237,38 +237,127 @@ export function TokenInsertBar({
   )
 }
 
-function ProductInsertBar({
-  onInsert,
+function productToken(p: Product): string {
+  return `{{product:${p.id}}}`
+}
+
+function hasProductToken(body: string, p: Product): boolean {
+  const idRe = new RegExp(`\\{\\{\\s*product:${p.id}\\s*\\}\\}`)
+  if (idRe.test(body)) return true
+  if (p.sku) {
+    const skuRe = new RegExp(`\\{\\{\\s*product:${p.sku.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`)
+    if (skuRe.test(body)) return true
+  }
+  return false
+}
+
+export function ProductInsertBar({
+  body,
+  onChange,
 }: {
-  onInsert: (token: string) => void
+  body: string
+  onChange: (next: string) => void
 }) {
-  const { data: products = [] } = useQuery<Product[]>({
+  const [q, setQ] = useState('')
+  const { data: products = [], isLoading } = useQuery<Product[]>({
     queryKey: ['products', 'mail-picker'],
     queryFn: () => productsApi.list(),
-    staleTime: 60_000,
+    staleTime: 30_000,
   })
-  if (!products.length) return null
+
+  const filtered = q.trim()
+    ? products.filter((p) => {
+        const hay = `${p.name} ${p.description || ''}`.toLowerCase()
+        return hay.includes(q.trim().toLowerCase())
+      })
+    : products
+
+  const gridOn = /\{\{\s*product_grid\s*\}\}/.test(body)
+
+  function toggle(p: Product) {
+    const token = productToken(p)
+    if (hasProductToken(body, p)) {
+      let next = body.replace(new RegExp(`\\{\\{\\s*product:${p.id}\\s*\\}\\}`, 'g'), '')
+      if (p.sku) {
+        next = next.replace(
+          new RegExp(`\\{\\{\\s*product:${p.sku.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`, 'g'),
+          '',
+        )
+      }
+      onChange(next)
+      return
+    }
+    onChange(`${body}${token}`)
+  }
+
+  function toggleAll() {
+    if (gridOn) onChange(body.replace(/\{\{\s*product_grid\s*\}\}/g, ''))
+    else onChange(`${body}{{product_grid}}`)
+  }
+
   return (
-    <div className="flex flex-wrap gap-1 items-center mt-1">
-      <span className="text-[10px] text-muted-foreground uppercase tracking-wider mr-1">Products</span>
-      <button
-        type="button"
-        onClick={() => onInsert('{{product_grid}}')}
-        className="text-[11px] px-2 py-0.5 border rounded bg-background hover:bg-muted"
-      >
-        Product grid
-      </button>
-      {products.slice(0, 12).map((p) => (
+    <div className="mt-1 mb-2 rounded-lg border bg-background p-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Products
+        </span>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search products…"
+          className="flex-1 min-w-[140px] px-2 py-1 text-xs border rounded-md bg-background"
+        />
         <button
-          key={p.id}
           type="button"
-          onClick={() => onInsert(`{{product:${p.sku || p.id}}}`)}
-          className="text-[11px] px-2 py-0.5 border rounded bg-background hover:bg-muted"
-          title={p.name}
+          onClick={toggleAll}
+          className={`text-[11px] px-2 py-1 border rounded font-semibold ${
+            gridOn ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted'
+          }`}
         >
-          {p.sku || p.name}
+          {gridOn ? 'All products in mail' : 'Insert all products'}
         </button>
-      ))}
+      </div>
+      {isLoading ? (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      ) : products.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Add products first, then pick them here for the template.</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No products match “{q}”.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
+          {filtered.map((p) => {
+            const on = hasProductToken(body, p) || gridOn
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => toggle(p)}
+                className={`text-left rounded-lg border overflow-hidden transition-colors ${
+                  on ? 'border-primary ring-2 ring-primary/30' : 'hover:border-foreground/30'
+                }`}
+                title={p.description || p.name}
+              >
+                {p.imageUrl ? (
+                  <img src={p.imageUrl} alt="" className="h-20 w-full object-cover bg-muted" />
+                ) : (
+                  <div className="h-20 bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                    No photo
+                  </div>
+                )}
+                <div className="p-1.5 space-y-0.5">
+                  <p className="text-[11px] font-semibold line-clamp-2 leading-tight">{p.name}</p>
+                  <p className="text-[11px] text-primary font-bold">{formatMoney(p.unitPrice, p.currency)}</p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+      <p className="text-[10px] text-muted-foreground">
+        Click a product to add it to this template. Click again to remove it. Recipients see photo, name, price and description.
+      </p>
     </div>
   )
 }
@@ -393,7 +482,7 @@ export function TemplatesTab() {
                 value={addForm.body}
                 onChange={(v) => setAddForm((f) => ({ ...f, body: v }))}
               />
-              <ProductInsertBar onInsert={(tok) => setAddForm((f) => ({ ...f, body: `${f.body}${tok}` }))} />
+              <ProductInsertBar body={addForm.body} onChange={(body) => setAddForm((f) => ({ ...f, body }))} />
             </div>
             {/* <textarea ref={addBodyRef} value={addForm.body} onChange={(e) => setAddForm((f) => ({ ...f, body: e.target.value }))}
               rows={8} placeholder="<p>Hi {{firstName}},</p>…"
@@ -481,7 +570,7 @@ export function TemplatesTab() {
                           value={editForm.body}
                           onChange={(v) => setEditForm((f) => ({ ...f, body: v }))}
                         />
-                        <ProductInsertBar onInsert={(tok) => setEditForm((f) => ({ ...f, body: `${f.body}${tok}` }))} />
+                        <ProductInsertBar body={editForm.body} onChange={(body) => setEditForm((f) => ({ ...f, body }))} />
                       </div>
                       {/* <textarea ref={editBodyRef} value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))}
                         rows={10}

@@ -52,6 +52,13 @@ let sessionTerminated = false
 // short-circuit before hitting the server so the user gets a clean redirect
 // instead of a confusing 401 from the backend.
 api.interceptors.request.use((config) => {
+  // The instance defaults to application/json. FormData must go out as
+  // multipart with a browser-generated boundary, or multer never sees the file
+  // and product / mail image uploads 400 with "No image uploaded".
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    config.headers.delete('Content-Type')
+  }
+
   const url: string = config.url || ''
   const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/forgot-password')
     || url.includes('/auth/verify-otp') || url.includes('/auth/reset-password')

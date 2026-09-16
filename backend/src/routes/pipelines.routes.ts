@@ -325,8 +325,12 @@ productsRoutes.patch('/:id', adminOnly, zValidator('json', productBody.partial()
 productsRoutes.post('/:id/image', adminOnly, uploadSingle('image'), async (c) => {
   const id = BigInt(c.req.param('id'))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const file = ((c.env as any)?.incoming as any)?.file as Express.Multer.File | undefined
+  const incoming = (c.env as any)?.incoming as any
+  const file = (incoming?.file ?? incoming?.files?.image?.[0] ?? incoming?.files?.[0]) as Express.Multer.File | undefined
   if (!file) return c.json({ error: 'No image uploaded' }, 400)
+  if (file.mimetype && !file.mimetype.startsWith('image/')) {
+    return c.json({ error: 'Only image files are allowed' }, 400)
+  }
   const imageUrl = storedUploadPath(file)
   const row = await prisma.product.update({ where: { id }, data: { imageUrl } })
   return c.json(bigintFix(stock.serializeProduct(row)))

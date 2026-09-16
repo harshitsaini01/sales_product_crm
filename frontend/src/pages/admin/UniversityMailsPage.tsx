@@ -638,14 +638,9 @@ export function UniversityMailsPage() {
                 <div>
                   <span className="text-xs font-semibold text-muted-foreground uppercase">Student Profile:</span>
                   {selectedMail.student ? (
-                    <Link
-                      to="/app/students/$studentId"
-                      params={{ studentId: String(selectedMail.studentId) }}
-                      className="font-medium text-primary hover:underline flex items-center gap-1"
-                    >
+                    <p className="font-medium text-foreground flex items-center gap-1">
                       {selectedMail.student.name}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
+                    </p>
                   ) : (
                     <p className="font-medium text-foreground">N/A</p>
                   )}

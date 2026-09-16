@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { formatDate, maskPhone } from '@/lib/utils'
@@ -95,14 +94,10 @@ export function Students() {
                   <tr key={s.id} className="border-b hover:bg-muted/30 transition-colors">
                     <td className="p-3 text-muted-foreground">{(page - 1) * 25 + i + 1}</td>
                     <td className="p-3">
-                      <Link
-                        to="/app/students/$studentId"
-                        params={{ studentId: String(s.id) }}
-                        className="font-medium hover:text-primary hover:underline flex items-center gap-1.5"
-                      >
+                      <span className="font-medium flex items-center gap-1.5">
                         <GraduationCap className="h-3.5 w-3.5 text-muted-foreground" />
                         {s.name}
-                      </Link>
+                      </span>
                     </td>
                     <td className="p-3 text-xs space-y-0.5">
                       {s.mobile && <div>{maskPhone(s.mobile, reveal)}</div>}

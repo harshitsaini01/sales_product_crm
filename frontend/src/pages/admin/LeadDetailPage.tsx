@@ -267,7 +267,9 @@ function FollowupsTab({ lead, qc: _qc }: { lead: Lead; qc: ReturnType<typeof use
  * anything here changing. Hiding never deletes: the columns keep their values
  * and turning a group back on shows them again.
  */
-const INFO_SECTIONS = [
+type InfoField = { key: string; label: string; type?: 'text' | 'number' }
+
+const INFO_SECTIONS: { id: string; title: string; fields: InfoField[] }[] = [
   {
     id: 'personal',
     title: 'Personal Information',

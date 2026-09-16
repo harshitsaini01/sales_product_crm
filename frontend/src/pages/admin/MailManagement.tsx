@@ -41,7 +41,7 @@ import {
   Reply as ReplyIcon,
   ChevronLeft,
 } from 'lucide-react'
-import { TemplatesTab, SignaturesTab, HtmlPreview } from './Communication'
+import { TemplatesTab, SignaturesTab, HtmlPreview, ProductInsertBar } from './Communication'
 import { EmailAccountsTab } from './CampaignGroups'
 import { CopyButton, LeadLinkChip } from '@/components/common/MailRowBits'
 import { downloadBlob } from '@/lib/utils'
@@ -976,6 +976,7 @@ function ComposeTab() {
             placeholder="HTML body. Use {{name}} to personalize per recipient."
             className="w-full px-3 py-2 text-sm border rounded-lg bg-background resize-none font-mono"
           />
+          <ProductInsertBar body={body} onChange={setBody} />
 
           <ComposePreview
             subject={subject}

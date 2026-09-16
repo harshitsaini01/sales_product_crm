@@ -2,7 +2,6 @@
 // so catalog photos and prices stay current.
 
 import { prisma } from '../../lib/prisma'
-import { atp, stockStatus } from './stock.service'
 
 const n = (v: unknown) => (v == null ? 0 : Number(v))
 const esc = (v: unknown) =>
@@ -21,31 +20,23 @@ export function productCardHtml(p: {
   sku?: string | null
   imageUrl?: string | null
   shortDescription?: string | null
+  description?: string | null
   unitPrice?: unknown
   currency?: string | null
-  stockQuantity?: unknown
-  reservedQuantity?: unknown
-  minStockLevel?: unknown
 }): string {
   const price = n(p.unitPrice)
   const money = `${p.currency === 'INR' || !p.currency ? '₹' : `${p.currency} `}${price.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`
   const img = absUrl(p.imageUrl)
     ? `<img src="${esc(absUrl(p.imageUrl))}" alt="${esc(p.name)}" width="160" height="160" style="display:block;width:160px;height:160px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0" />`
     : `<div style="width:160px;height:160px;border-radius:10px;background:#f1f5f9;color:#94a3b8;display:flex;align-items:center;justify-content:center;font-size:12px">No photo</div>`
-  const available = atp(n(p.stockQuantity), n(p.reservedQuantity))
-  const status = stockStatus(n(p.stockQuantity), n(p.reservedQuantity), n(p.minStockLevel))
-  const badge =
-    status === 'in_stock' ? 'In stock' : status === 'low_stock' ? `Low stock (${available})` : 'Out of stock'
-  const badgeColor = status === 'in_stock' ? '#047857' : status === 'low_stock' ? '#b45309' : '#b91c1c'
+  const desc = (p.shortDescription || p.description || '').trim()
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:12px;margin:8px 0;max-width:420px">
   <tr>
     <td style="padding:12px;vertical-align:top">${img}</td>
     <td style="padding:12px 16px 12px 0;vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif">
       <div style="font-size:16px;font-weight:700;color:#0f172a">${esc(p.name)}</div>
-      ${p.sku ? `<div style="font-size:11px;color:#64748b;margin-top:2px">SKU ${esc(p.sku)}</div>` : ''}
-      ${p.shortDescription ? `<div style="font-size:13px;color:#475569;margin-top:6px">${esc(p.shortDescription)}</div>` : ''}
+      ${desc ? `<div style="font-size:13px;color:#475569;margin-top:6px">${esc(desc)}</div>` : ''}
       <div style="font-size:18px;font-weight:700;color:#4f46e5;margin-top:8px">${money}</div>
-      <div style="font-size:11px;font-weight:600;color:${badgeColor};margin-top:4px">${esc(badge)}</div>
     </td>
   </tr>
 </table>`
@@ -64,16 +55,23 @@ export async function resolveProductTokens(html: string, extraIds: Array<number 
     else skus.add(token)
   }
 
-  if (!ids.size && !skus.size && !/\{\{\s*product_grid\s*\}\}/.test(out)) return out
+  const wantGrid = /\{\{\s*product_grid\s*\}\}/.test(out)
+  if (!ids.size && !skus.size && !wantGrid) return out
 
   const products = await prisma.product.findMany({
     where: {
       active: true,
-      OR: [
-        ...(ids.size ? [{ id: { in: [...ids].map((id) => BigInt(id)) } }] : []),
-        ...(skus.size ? [{ sku: { in: [...skus] } }] : []),
-      ],
+      ...(!wantGrid && (ids.size || skus.size)
+        ? {
+            OR: [
+              ...(ids.size ? [{ id: { in: [...ids].map((id) => BigInt(id)) } }] : []),
+              ...(skus.size ? [{ sku: { in: [...skus] } }] : []),
+            ],
+          }
+        : {}),
     },
+    orderBy: { name: 'asc' },
+    take: 500,
   })
 
   const bySku = new Map(products.filter((p) => p.sku).map((p) => [p.sku as string, p]))

@@ -13,7 +13,7 @@ import { Send as SendIcon } from 'lucide-react'
 type Tab = 'info' | 'academics' | 'fees' | 'university-mail'
 
 export function StudentDetail() {
-  const { studentId } = useParams({ from: '/app/students/$studentId' })
+  const { studentId } = useParams({ strict: false }) as { studentId: string }
   const qc = useQueryClient()
   const { isAdmin } = useAuthStore()
   const canRevealPhone = useAuthStore((s) => s.canRevealPhone())

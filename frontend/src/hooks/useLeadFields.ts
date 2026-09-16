@@ -68,7 +68,7 @@ export function useLeadFields() {
      */
     function filterSections<
       S extends { id: string; title?: string; fields: F[] },
-      F extends { key: string; label?: string },
+      F extends { key: string; label?: string; type?: string },
     >(sections: S[]): S[] {
       return sections
         .filter((s) => groupVisible(s.id))
