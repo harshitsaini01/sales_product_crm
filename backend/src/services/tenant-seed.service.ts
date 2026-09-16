@@ -12,6 +12,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { getVertical, type VerticalKey } from '../config/verticals'
+import { seedProductCatalog } from '../config/product-catalog-seed'
 
 // The pipeline used to be four hardcoded arrays here. It now comes from the
 // customer's vertical preset (config/verticals.ts), so an IT-sales customer is
@@ -38,6 +39,7 @@ export interface SeedResult {
   pipelines: number
   lostReasons: number
   teams: number
+  products: number
   branchId: number | null
   adminUserId: number | null
 }
@@ -71,6 +73,7 @@ export async function seedTenantSchema(
     pipelines: 0,
     lostReasons: 0,
     teams: 0,
+    products: 0,
     branchId: null,
     adminUserId: null,
   }
@@ -198,6 +201,30 @@ export async function seedTenantSchema(
     }
   }
 
+  if ((opts.vertical ?? 'product_sales') === 'product_sales') {
+    const pipeline = await db.pipeline.findFirst({
+      where: { slug: 'product-sales' },
+      select: { id: true },
+    })
+    if (pipeline) {
+      const rename = async (fromSlugs: string[], name: string, extra: { isWon?: boolean; isLost?: boolean } = {}) => {
+        const row = await db.pipelineStage.findFirst({
+          where: { pipelineId: pipeline.id, slug: { in: fromSlugs } },
+          select: { id: true },
+        })
+        if (!row) return
+        await db.pipelineStage.update({
+          where: { id: row.id },
+          data: { name, slug: slugify(name), ...extra },
+        })
+      }
+      await rename(['new', 'enquiry'], 'Enquiry')
+      await rename(['negotiation', 'follow-up'], 'Follow-up')
+      await rename(['won', 'confirmed'], 'Confirmed', { isWon: true, isLost: false })
+      await rename(['lost', 'dropped'], 'Dropped', { isWon: false, isLost: true })
+    }
+  }
+
   for (const [i, reason] of (LOST_REASONS ?? []).entries()) {
     const slug = slugify(reason)
     const existing = await db.lostReason.findFirst({ where: { slug }, select: { id: true } })
@@ -227,6 +254,11 @@ export async function seedTenantSchema(
     })
   }
   result.branchId = Number(branch.id)
+
+  if ((opts.vertical ?? 'product_sales') === 'product_sales') {
+    const catalog = await seedProductCatalog(db)
+    result.products = catalog.created
+  }
 
   // ── System settings
   await db.systemSetting.upsert({

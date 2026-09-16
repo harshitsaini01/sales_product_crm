@@ -24,6 +24,7 @@
     "tenant:vertical": "tsx scripts/set-vertical.ts",
     "tenant:feature": "tsx scripts/set-feature.ts",
     "seed:teams": "tsx scripts/seed-teams.ts",
+    "seed:products": "tsx scripts/seed-products.ts",
     "seed:b2b": "tsx scripts/seed-b2b-demo.ts",
     "smoke:b2b": "tsx scripts/smoke-b2b-flow.ts",
     "check:me": "tsx scripts/check-me.ts",

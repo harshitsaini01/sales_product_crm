@@ -16,24 +16,21 @@ import { ActivityTimeline } from '@/components/crm/ActivityTimeline'
 import { CustomFieldsPanel } from '@/components/crm/CustomFieldsPanel'
 import { LostDealModal } from '@/components/crm/LostDealModal'
 import { ChainBar } from '@/components/crm/ChainBar'
+import { LeadMailThread } from '@/components/leads/LeadMailThread'
 import { StatusBadge as ProjectStatusBadge } from '@/components/projects/bits'
 import { NewProjectModal } from '@/components/projects/NewProjectModal'
-import { NotesTab } from './AccountDetail'
 import { useLabels } from '@/hooks/useLabels'
 import { cn } from '@/lib/utils'
 
-type Tab = 'overview' | 'products' | 'sales' | 'projects' | 'notes' | 'fields'
+type Tab = 'overview' | 'products' | 'sales' | 'projects' | 'mail' | 'fields'
 
 const input = 'w-full rounded-lg border bg-background px-3 py-2 text-sm'
 
 /**
  * One deal, start to finish.
  *
- * The stage rail is the control and the progress bar; Won and Lost are
- * explicit buttons, not columns you have to find. Underneath sits the sales
- * chain — quoted, ordered, invoiced, received — with the one action the chain
- * is waiting for, so "what do I do next on this?" is answered by the page
- * rather than by memory.
+ * The stage rail is the control and the progress bar; Confirmed and Dropped
+ * are explicit buttons. Place order lives only on Line items, after confirm.
  */
 export default function DealDetail() {
   const { dealId } = useParams({ from: '/app/deals/$dealId' })
@@ -43,7 +40,6 @@ export default function DealDetail() {
   const hasFeature = useAuthStore((st) => st.hasFeature)
   const [tab, setTab] = useState<Tab>('overview')
   const [losing, setLosing] = useState(false)
-  const [winning, setWinning] = useState(false)
 
   const { data: deal, isLoading } = useQuery({ queryKey: ['deals', id], queryFn: () => dealsApi.get(id) })
   const { data: pipelines = [] } = useQuery({ queryKey: ['pipelines'], queryFn: pipelinesApi.list })
@@ -58,22 +54,10 @@ export default function DealDetail() {
     onSuccess: (d) => {
       setLosing(false)
       refresh()
-      if (d.stage?.isWon) toast.success('Won — place the order to raise the invoice.')
+      if (d.stage?.isWon) toast.success('Confirmed. Place the order from Line items.')
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (e: any) => toast.error(e?.response?.data?.error || 'Could not move'),
-  })
-
-  const placeOrder = useMutation({
-    mutationFn: () => dealsApi.placeOrder(id),
-    onSuccess: (r) => {
-      toast.success(`Order ${r.orderNumber} placed${r.invoiceNumber ? ` · ${r.invoiceNumber}` : ''}`)
-      setWinning(false)
-      refresh()
-      navigate({ to: '/app/orders/$orderId', params: { orderId: String(r.orderId) } })
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (e: any) => toast.error(e?.response?.data?.error || 'Could not place the order'),
   })
 
   if (isLoading) return <p className="py-12 text-center text-sm text-muted-foreground">Loading…</p>
@@ -88,10 +72,10 @@ export default function DealDetail() {
 
   const tabs: { key: Tab; label: string; show?: boolean }[] = [
     { key: 'overview', label: 'Overview' },
+    { key: 'mail', label: 'Mail', show: !!deal.leadId },
     { key: 'products', label: `Line items${deal.products?.length ? ` · ${deal.products.length}` : ''}` },
     { key: 'sales', label: 'Order & invoice', show: hasFeature('sales_docs') },
     { key: 'projects', label: 'Projects', show: hasFeature('projects') },
-    { key: 'notes', label: 'Notes' },
     { key: 'fields', label: 'Custom fields', show: hasFeature('custom_fields') },
   ]
 
@@ -183,11 +167,11 @@ export default function DealDetail() {
           <span className="mx-1 hidden text-muted-foreground sm:inline"><ArrowRight className="h-3.5 w-3.5" /></span>
           {wonStage && (
             <button
-              onClick={() => !deal.stage?.isWon && setWinning(true)}
+              onClick={() => !deal.stage?.isWon && move.mutate({ stageId: wonStage.id })}
               disabled={move.isPending || deal.stage?.isWon}
               className={cn('inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors', deal.stage?.isWon ? 'bg-emerald-600 text-white' : 'border border-emerald-300 text-emerald-700 hover:bg-emerald-50')}
             >
-              <Trophy className="h-3.5 w-3.5" /> {deal.stage?.isWon ? 'Won' : 'Mark won'}
+              <Trophy className="h-3.5 w-3.5" /> {deal.stage?.isWon ? 'Confirmed' : 'Mark confirmed'}
             </button>
           )}
           {lostStage && (
@@ -196,14 +180,14 @@ export default function DealDetail() {
               disabled={move.isPending || deal.stage?.isLost}
               className={cn('inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors', deal.stage?.isLost ? 'bg-rose-600 text-white' : 'border border-rose-300 text-rose-700 hover:bg-rose-50')}
             >
-              <XCircle className="h-3.5 w-3.5" /> {deal.stage?.isLost ? 'Lost' : 'Mark lost'}
+              <XCircle className="h-3.5 w-3.5" /> {deal.stage?.isLost ? 'Dropped' : 'Mark dropped'}
             </button>
           )}
         </div>
 
         {deal.lostReason && (
           <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">
-            Lost — {deal.lostReason.name}{deal.lostNotes && `: ${deal.lostNotes}`}
+            Dropped — {deal.lostReason.name}{deal.lostNotes && `: ${deal.lostNotes}`}
             {!open && stages.length > 0 && (
               <button onClick={() => move.mutate({ stageId: stages.filter((s) => !s.isWon && !s.isLost)[0]?.id })} className="ml-3 text-xs underline">Reopen</button>
             )}
@@ -211,7 +195,7 @@ export default function DealDetail() {
         )}
         {deal.stage?.isWon && deal.actualCloseDate && (
           <p className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
-            Won on {new Date(deal.actualCloseDate).toLocaleDateString('en-IN')}.
+            Confirmed on {new Date(deal.actualCloseDate).toLocaleDateString('en-IN')}. Place the order from Line items.
           </p>
         )}
       </div>
@@ -219,16 +203,7 @@ export default function DealDetail() {
       {/* The chain: deal › quote › contract › order › invoice › paid, with the
           next action — the same bar every document page carries. */}
       {hasFeature('sales_docs') && (
-        <div className="space-y-2">
-          <ChainBar current={{ kind: 'deal', id }} simple hideNext />
-          <div className="flex justify-end gap-2">
-            {!(deal.chain?.orders ?? []).length && (
-              <button onClick={() => setWinning(true)} disabled={placeOrder.isPending || !(deal.products?.length)} title={!deal.products?.length ? 'Add products first' : undefined} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
-                <Plus className="h-3.5 w-3.5" /> Place order
-              </button>
-            )}
-          </div>
-        </div>
+        <ChainBar current={{ kind: 'deal', id }} simple hideNext />
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
@@ -253,7 +228,7 @@ export default function DealDetail() {
           {tab === 'sales' && deal.chain && (
             <div className="space-y-3 rounded-xl border bg-card p-4">
               {!deal.chain.orders.length && !deal.chain.invoices.length && (
-                <p className="text-sm text-muted-foreground">No order yet. Add products, then place the order.</p>
+                <p className="text-sm text-muted-foreground">No order yet. Confirm the deal, then place the order from Line items.</p>
               )}
               {deal.chain.orders.map((o) => (
                 <Link key={o.id} to="/app/orders/$orderId" params={{ orderId: String(o.id) }} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-accent">
@@ -270,7 +245,9 @@ export default function DealDetail() {
             </div>
           )}
           {tab === 'projects' && <ProjectsTab deal={deal} />}
-          {tab === 'notes' && <NotesTab entityType="deal" entityId={id} />}
+          {tab === 'mail' && deal.leadId && (
+            <LeadMailThread leadId={deal.leadId} leadEmail={deal.lead?.email} />
+          )}
           {tab === 'fields' && <CustomFieldsPanel entityType="deal" entityId={id} noun="deals" onSaved={refresh} />}
         </div>
 
@@ -316,30 +293,11 @@ export default function DealDetail() {
         <LostDealModal
           dealName={deal.name}
           pending={move.isPending}
+          title={`Mark “${deal.name}” dropped`}
+          confirmLabel="Mark dropped"
           onCancel={() => setLosing(false)}
           onConfirm={(lostReasonId, lostNotes) => move.mutate({ stageId: lostStage.id, lost: { lostReasonId, lostNotes } })}
         />
-      )}
-      {winning && wonStage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !placeOrder.isPending && !move.isPending && setWinning(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold">Place the order?</h2>
-            <p className="mt-2 text-sm text-muted-foreground">This marks the deal won and raises an order plus invoice from the line items.</p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button disabled={placeOrder.isPending || move.isPending} onClick={() => setWinning(false)} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent">Cancel</button>
-              <button
-                disabled={placeOrder.isPending || move.isPending || !(deal.products?.length)}
-                onClick={async () => {
-                  if (!deal.stage?.isWon) await move.mutateAsync({ stageId: wonStage.id })
-                  placeOrder.mutate()
-                }}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {placeOrder.isPending || move.isPending ? 'Placing…' : 'Won + place order'}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )
@@ -437,11 +395,6 @@ function OverviewTab({ deal, onSaved }: { deal: Deal; onSaved: () => void }) {
         <input className={input} placeholder="The one thing that has to happen next" value={String(val('nextStep'))} onChange={(e) => set('nextStep', e.target.value)} />
       </div>
 
-      <div>
-        <label className="mb-1.5 block text-sm font-medium">Notes</label>
-        <textarea className={input} rows={3} value={String(val('notes'))} onChange={(e) => set('notes', e.target.value)} />
-      </div>
-
       {deal.contact && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
           <div className="min-w-0 flex-1">
@@ -526,6 +479,7 @@ function ProjectsTab({ deal }: { deal: Deal }) {
 
 function ProductsTab({ deal, onSaved }: { deal: Deal; onSaved: () => void }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [adding, setAdding] = useState(false)
   const [line, setLine] = useState<Record<string, unknown>>({ name: '', quantity: 1, unitPrice: 0, discountPercent: 0, taxPercent: 18 })
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -558,16 +512,40 @@ function ProductsTab({ deal, onSaved }: { deal: Deal; onSaved: () => void }) {
     onError: (e: any) => toast.error(e?.response?.data?.error || 'Could not save'),
   })
   const remove = useMutation({ mutationFn: (l: DealProduct) => dealsApi.removeLine(deal.id, l.id), onSuccess: refresh })
+  const placeOrder = useMutation({
+    mutationFn: () => dealsApi.placeOrder(deal.id),
+    onSuccess: (r) => {
+      toast.success(`Order ${r.orderNumber} placed${r.invoiceNumber ? ` · ${r.invoiceNumber}` : ''}`)
+      refresh()
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      navigate({ to: '/app/orders/$orderId', params: { orderId: String(r.orderId) } })
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onError: (e: any) => toast.error(e?.response?.data?.error || 'Could not place the order'),
+  })
 
   const set = (k: string, v: unknown) => setLine((f) => ({ ...f, [k]: v }))
   const lines = deal.products ?? []
   const total = lines.reduce((s, l) => s + Number(l.total), 0)
   const cell = 'w-full rounded border bg-background px-2 py-1 text-right text-sm'
+  const alreadyOrdered = !!(deal.chain?.orders ?? []).length
+  const canPlace = deal.stage?.isWon && lines.length > 0 && !alreadyOrdered
 
   return (
     <div className="space-y-3">
+      {!deal.stage?.isWon && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Mark this deal <strong>confirmed</strong> first. Place order is only on this tab, and it stays off until then.
+        </p>
+      )}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Priced as they stand here; a quote raised from this deal copies them across.</p>
+        <p className="text-xs text-muted-foreground">
+          {!deal.stage?.isWon
+            ? 'Mark confirmed first. The order can only be placed from here — nowhere else.'
+            : alreadyOrdered
+              ? 'This deal already has an order.'
+              : 'Confirmed. Place the order from these line items.'}
+        </p>
         <button onClick={() => setAdding((v) => !v)} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-accent">
           <Plus className="h-4 w-4" /> Add line
         </button>
@@ -675,6 +653,24 @@ function ProductsTab({ deal, onSaved }: { deal: Deal; onSaved: () => void }) {
         </div>
       )}
       <p className="text-right text-xs text-muted-foreground">{compactMoney(total)} across {lines.length} line{lines.length === 1 ? '' : 's'}</p>
+      <div className="flex justify-end">
+        <button
+          onClick={() => placeOrder.mutate()}
+          disabled={!canPlace || placeOrder.isPending}
+          title={
+            !deal.stage?.isWon
+              ? 'Mark this deal confirmed first'
+              : !lines.length
+                ? 'Add line items first'
+                : alreadyOrdered
+                  ? 'Already ordered'
+                  : undefined
+          }
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {placeOrder.isPending ? 'Placing…' : 'Place order'}
+        </button>
+      </div>
     </div>
   )
 }

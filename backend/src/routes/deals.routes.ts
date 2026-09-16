@@ -314,7 +314,7 @@ dealsRoutes.get('/:id', async (c) => {
         })
       : null,
     customFields.valuesFor('deal', id, { stage: deal.stage.slug }),
-    deal.leadId ? prisma.lead.findUnique({ where: { id: deal.leadId }, select: { id: true, name: true } }) : null,
+    deal.leadId ? prisma.lead.findUnique({ where: { id: deal.leadId }, select: { id: true, name: true, email: true, mobile: true } }) : null,
     prisma.quote.findMany({
       where: { dealId: id },
       orderBy: { issueDate: 'desc' },
@@ -586,7 +586,7 @@ dealsRoutes.post(
 
     // "Why did we lose?" is unanswerable a month later if it is optional now.
     if (stage.isLost && !lostReasonId) {
-      return c.json({ error: 'Pick a reason before marking a deal lost.' }, 400)
+      return c.json({ error: 'Pick a reason before marking this deal dropped.' }, 400)
     }
 
     const terminal = stage.isWon || stage.isLost
@@ -620,14 +620,17 @@ dealsRoutes.post(
         entityType: 'account',
         entityId: deal.accountId,
         kind: 'stage_change',
-        subject: `Deal ${stage.isWon ? 'won' : 'lost'}: ${deal.name}`,
+        subject: `Deal ${stage.isWon ? 'confirmed' : 'dropped'}: ${deal.name}`,
         actorId: user.userId,
         meta: { dealId: Number(id), value: deal.value ? Number(deal.value) : null },
       })
     }
 
+    if (stage.isWon && deal.leadId) {
+      await markLeadBySlug(deal.leadId, 'confirmed', BigInt(user.userId), `Deal confirmed: ${deal.name}`)
+    }
     if (stage.isLost && deal.leadId) {
-      await markLeadBySlug(deal.leadId, 'lost', BigInt(user.userId), `Deal lost: ${deal.name}`)
+      await markLeadBySlug(deal.leadId, 'lost', BigInt(user.userId), `Deal dropped: ${deal.name}`)
     }
 
     return c.json(serializeDeal(updated))

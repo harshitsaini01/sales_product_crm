@@ -13,11 +13,15 @@ export function LostDealModal({
   onCancel,
   onConfirm,
   pending,
+  title,
+  confirmLabel,
 }: {
   dealName: string
   onCancel: () => void
   onConfirm: (lostReasonId: number, lostNotes?: string) => void
   pending?: boolean
+  title?: string
+  confirmLabel?: string
 }) {
   const [reasonId, setReasonId] = useState('')
   const [notes, setNotes] = useState('')
@@ -26,9 +30,9 @@ export function LostDealModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
       <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-bold">Mark &ldquo;{dealName}&rdquo; lost</h2>
+        <h2 className="text-lg font-bold">{title ?? `Mark “${dealName}” dropped`}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          A reason is required — it is what makes &ldquo;why do we lose?&rdquo; answerable later.
+          A reason is required — it is what makes “why did this drop?” answerable later.
         </p>
 
         <div className="mt-4 space-y-3">
@@ -63,7 +67,7 @@ export function LostDealModal({
             disabled={!reasonId || pending}
             className="rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground disabled:opacity-50"
           >
-            Mark lost
+            {confirmLabel ?? 'Mark dropped'}
           </button>
         </div>
       </div>

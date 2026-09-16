@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus, X, LayoutGrid, AlertTriangle, Search, List, Kanban, Clock, Flame } from 'lucide-react'
@@ -33,7 +33,6 @@ const STALE_DAYS = 14
 
 export default function Deals() {
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const t = useLabels()
   const me = useAuthStore((s) => s.user)
   const isAdmin = useAuthStore((s) => s.isAdmin)
@@ -48,8 +47,6 @@ export default function Deals() {
   const [dragging, setDragging] = useState<number | null>(null)
   const [overStage, setOverStage] = useState<number | null>(null)
   const [losing, setLosing] = useState<{ deal: Deal; stageId: number } | null>(null)
-  const [winning, setWinning] = useState<{ deal: Deal; stageId: number } | null>(null)
-  const [placing, setPlacing] = useState(false)
 
   const { data: pipelines = [] } = useQuery({ queryKey: ['pipelines'], queryFn: pipelinesApi.list })
   const { data: owners = [] } = useQuery({
@@ -92,36 +89,7 @@ export default function Deals() {
       setLosing({ deal, stageId: stage.id })
       return
     }
-    if (stage.isWon) {
-      setWinning({ deal, stageId: stage.id })
-      return
-    }
     move.mutate({ id, stageId: stage.id })
-  }
-
-  async function confirmWin() {
-    if (!winning) return
-    setPlacing(true)
-    try {
-      await dealsApi.moveStage(winning.deal.id, winning.stageId)
-      try {
-        const r = await dealsApi.placeOrder(winning.deal.id)
-        toast.success(`Order ${r.orderNumber} placed${r.invoiceNumber ? ` · ${r.invoiceNumber}` : ''}`)
-        setWinning(null)
-        refresh()
-        navigate({ to: '/app/orders/$orderId', params: { orderId: String(r.orderId) } })
-      } catch (e: unknown) {
-        const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
-        toast.error(msg || 'Won, but could not place the order. Add products and try again from the deal.')
-        setWinning(null)
-        refresh()
-      }
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
-      toast.error(msg || 'Could not move that deal')
-    } finally {
-      setPlacing(false)
-    }
   }
 
   const isStale = (d: Deal) =>
@@ -172,7 +140,7 @@ export default function Deals() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <Stat label="Open" value={formatMoney(forecast.openValue)} sub={`${forecast.openCount} open`} />
           <Stat label="Weighted" value={formatMoney(forecast.weightedValue)} sub="value × probability" accent />
-          <Stat label="Won" value={formatMoney(forecast.wonValue)} sub={`${forecast.wonCount} won`} />
+          <Stat label="Confirmed" value={formatMoney(forecast.wonValue)} sub={`${forecast.wonCount} confirmed`} />
           <Stat label="Win rate" value={forecast.winRate == null ? '—' : `${forecast.winRate}%`} sub="of decided deals" />
           <Stat label="Avg cycle" value={forecast.averageCycleDays == null ? '—' : `${forecast.averageCycleDays}d`} sub="open to close" />
           <button onClick={() => setOnlyStale((v) => !v)} className="text-left">
@@ -279,25 +247,11 @@ export default function Deals() {
         <LostDealModal
           dealName={losing.deal.name}
           pending={move.isPending}
+          title={`Mark “${losing.deal.name}” dropped`}
+          confirmLabel="Mark dropped"
           onCancel={() => setLosing(null)}
           onConfirm={(lostReasonId, lostNotes) => move.mutate({ id: losing.deal.id, stageId: losing.stageId, lost: { lostReasonId, lostNotes } })}
         />
-      )}
-      {winning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !placing && setWinning(null)}>
-          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold">Place the order?</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Marking <span className="font-medium text-foreground">{winning.deal.name}</span> as won raises an order and invoice from its products.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button disabled={placing} onClick={() => setWinning(null)} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent">Cancel</button>
-              <button disabled={placing} onClick={() => void confirmWin()} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                {placing ? 'Placing…' : 'Won + place order'}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )

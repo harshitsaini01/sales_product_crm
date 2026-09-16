@@ -424,10 +424,10 @@ export const VERTICALS: VerticalPreset[] = [
         {
           name: 'Product Sales',
           stages: [
-            { name: 'New', probability: 10 },
-            { name: 'Negotiation', probability: 50 },
-            { name: 'Won', probability: 100, isWon: true },
-            { name: 'Lost', probability: 0, isLost: true },
+            { name: 'Enquiry', probability: 10 },
+            { name: 'Follow-up', probability: 50 },
+            { name: 'Confirmed', probability: 100, isWon: true },
+            { name: 'Dropped', probability: 0, isLost: true },
           ],
         },
       ],

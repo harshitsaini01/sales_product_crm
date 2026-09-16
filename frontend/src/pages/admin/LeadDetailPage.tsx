@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { leadsApi, notesApi, commentsApi, remindersApi, communicationApi, callsApi, followupsApi } from '@/lib/api'
-import { productsApi, formatMoney, type Product } from '@/lib/deals-api'
+import { leadsApi, notesApi, commentsApi, remindersApi, callsApi, followupsApi } from '@/lib/api'
 import { Flag, LayoutGrid, SlidersHorizontal } from 'lucide-react'
 import { formatDate, formatDateTime, maskPhone, normalizePhone } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
@@ -10,9 +9,9 @@ import { toast } from 'sonner'
 import {
   Phone, Mail, MapPin, MessageSquare, CalendarDays, Loader2,
   StickyNote, Bell, FileText, Send, Info, Trash2, PhoneCall,
-  Activity, ArrowRight, MessagesSquare, Search,
+  Activity, ArrowRight, MessagesSquare,
 } from 'lucide-react'
-import type { Lead, LeadFollowup, LeadNote, Reminder, MailTemplate } from '@/types'
+import type { Lead, LeadFollowup, LeadNote, Reminder } from '@/types'
 import { StatusBadge } from '@/components/leads/StatusBadge'
 import { QuickCallButton } from '@/components/leads/QuickCallButton'
 import { WhatsappSendModal } from '@/components/leads/WhatsappSendModal'
@@ -24,6 +23,7 @@ import { LeadDocumentsTab } from '@/components/leads/LeadDocumentsTab'
 import { RecordingPlayer } from '@/components/calls/RecordingPlayer'
 import { useLeadFields } from '@/hooks/useLeadFields'
 import { useLabels } from '@/hooks/useLabels'
+import { LeadMailThread } from '@/components/leads/LeadMailThread'
 import { CustomFieldsPanel } from '@/components/crm/CustomFieldsPanel'
 
 type Tab = 'overview' | 'info' | 'fields' | 'followups' | 'timeline' | 'notes' | 'comments' | 'flags' | 'reminders' | 'email' | 'documents' | 'calls'
@@ -1014,154 +1014,8 @@ function RemindersTab({ leadId, qc }: { leadId: number; qc: ReturnType<typeof us
 
 // ─── Email Tab ────────────────────────────────────────────────────────────────
 
-type MailHistoryRow = { id: number; subject: string; body: string; createdAt: string }
-
 function EmailTab({ lead }: { lead: Lead }) {
-  const qc = useQueryClient()
-  const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
-  const [sending, setSending] = useState(false)
-  const [templateId, setTemplateId] = useState('')
-
-  const { data: mails = [], isLoading: mailsLoading } = useQuery<MailHistoryRow[]>({
-    queryKey: ['lead-mails', lead.id],
-    queryFn: () => leadsApi.mails(lead.id),
-  })
-
-  const { data: templates = [] } = useQuery<MailTemplate[]>({
-    queryKey: ['comm', 'templates'],
-    queryFn: communicationApi.templates,
-  })
-
-  const applyTemplate = (id: string) => {
-    setTemplateId(id)
-    if (!id) return
-    const tpl = templates.find((t) => String(t.id) === id)
-    if (tpl) {
-      setSubject(tpl.subject || '')
-      setBody(tpl.body || '')
-    }
-  }
-
-  const send = async () => {
-    if (!lead.email) return toast.error('Lead has no email address')
-    if (!subject.trim() || !body.trim()) return toast.error('Subject and body are required')
-    setSending(true)
-    try {
-      await communicationApi.send({ toEmail: lead.email, subject, body, leadId: lead.id })
-      toast.success('Email sent')
-      setSubject('')
-      setBody('')
-      setTemplateId('')
-      qc.invalidateQueries({ queryKey: ['lead-mails', lead.id] })
-      qc.invalidateQueries({ queryKey: ['lead-timeline', lead.id] })
-    } catch {
-      toast.error('Failed to send email')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      {!lead.email && (
-        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
-          This lead has no email address on file.
-        </div>
-      )}
-      <div>
-        <label className="text-xs font-medium text-muted-foreground">To</label>
-        <input
-          value={lead.email || ''}
-          readOnly
-          className="w-full mt-1 px-3 py-1.5 text-sm border rounded-md bg-muted/30"
-        />
-      </div>
-      <div>
-        <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-          <FileText className="h-3.5 w-3.5" /> Template
-        </label>
-        <select
-          value={templateId}
-          onChange={(e) => applyTemplate(e.target.value)}
-          className="w-full mt-1 px-3 py-1.5 text-sm border rounded-md bg-background"
-        >
-          <option value="">— Choose a saved template —</option>
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.title}
-            </option>
-          ))}
-        </select>
-        {!templates.length && (
-          <p className="mt-1 text-xs text-muted-foreground">Save templates under Mail → Templates to pick them here.</p>
-        )}
-      </div>
-      <div>
-        <label className="text-xs font-medium text-muted-foreground">Subject</label>
-        <input
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          placeholder="Email subject..."
-          className="w-full mt-1 px-3 py-1.5 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
-      <div>
-        <label className="text-xs font-medium text-muted-foreground">Body</label>
-        <LeadProductPicker
-          onPick={(token) => setBody((b) => (b ? `${b}\n${token}` : token))}
-        />
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Compose your message..."
-          rows={8}
-          className="w-full mt-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-        />
-      </div>
-      <button
-        onClick={send}
-        disabled={sending || !lead.email}
-        className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
-      >
-        {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-        Send Email
-      </button>
-
-      {/* Sent History */}
-      <div className="border-t pt-4 mt-2">
-        <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
-          <Mail className="h-4 w-4" /> Sent History ({mails.length})
-        </h3>
-        {mailsLoading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          </div>
-        ) : mails.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No emails sent yet</p>
-        ) : (
-          <ul className="space-y-2">
-            {mails.map((m) => (
-              <li key={m.id}>
-                <details className="group border rounded-md overflow-hidden">
-                  <summary className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-accent/40 text-sm">
-                    <span className="font-medium truncate pr-3">{m.subject}</span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDateTime(m.createdAt)}
-                    </span>
-                  </summary>
-                  <div
-                    className="px-3 py-3 border-t bg-muted/20 text-sm prose prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: m.body }}
-                  />
-                </details>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  )
+  return <LeadMailThread leadId={lead.id} leadEmail={lead.email} />
 }
 
 // ─── Timeline Tab ─────────────────────────────────────────────────────────────
@@ -1331,53 +1185,4 @@ function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60)
   const s = sec % 60
   return m > 0 ? `${m}m ${s}s` : `${s}s`
-}
-
-function LeadProductPicker({ onPick }: { onPick: (token: string) => void }) {
-  const [q, setQ] = useState('')
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ['products', 'mail-picker'],
-    queryFn: () => productsApi.list(),
-    staleTime: 60_000,
-  })
-  const filtered = q.trim()
-    ? products.filter((p) =>
-        `${p.name} ${p.sku || ''} ${p.description || ''} ${p.category || ''}`.toLowerCase().includes(q.trim().toLowerCase()),
-      )
-    : products
-  if (!products.length) {
-    return <p className="mt-1 text-xs text-muted-foreground">Add products under Products, then click one to drop it into this mail.</p>
-  }
-  return (
-    <div className="mt-1 mb-2 space-y-1.5">
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search products…"
-          className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-xs"
-        />
-      </div>
-      {filtered.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No products match “{q}”.</p>
-      ) : (
-        <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
-          {filtered.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onPick(`{{product:${p.sku || p.id}}}`)}
-              className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs hover:bg-accent"
-              title={p.description || p.name}
-            >
-              {p.imageUrl && <img src={p.imageUrl} alt="" className="h-6 w-6 rounded object-cover" />}
-              <span>{p.name}</span>
-              <span className="text-muted-foreground">{formatMoney(p.unitPrice, p.currency)}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }

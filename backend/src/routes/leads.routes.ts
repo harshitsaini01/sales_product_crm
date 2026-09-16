@@ -3139,15 +3139,119 @@ leadsRoutes.get('/:id/calls', async (c) => {
   return c.json(bigintFix(logs))
 })
 
-// GET /api/leads/:id/mails — sent mail history for a single lead
+// GET /api/leads/:id/mails — sent + inbound thread for a single lead
 leadsRoutes.get('/:id/mails', async (c) => {
   const id = BigInt(c.req.param('id'))
-  const mails = await prisma.studentMailHistory.findMany({
-    where: { leadId: id },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
+  const lead = await prisma.lead.findUnique({
+    where: { id },
+    select: { email: true, email2: true, email3: true },
   })
-  return c.json(bigintFix(mails))
+  const emails = [lead?.email, lead?.email2, lead?.email3]
+    .map((e) => (e || '').trim().toLowerCase())
+    .filter(Boolean)
+
+  const [history, catalogs, inbounds, sent] = await Promise.all([
+    prisma.studentMailHistory.findMany({
+      where: { leadId: id },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+    }),
+    prisma.leadCatalogSend.findMany({
+      where: { leadId: id, channel: 'email' },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+      include: { items: true },
+    }),
+    prisma.inboundMail.findMany({
+      where: {
+        OR: [
+          { leadId: id },
+          ...emails.map((e) => ({ fromEmail: { equals: e, mode: 'insensitive' as const } })),
+        ],
+      },
+      orderBy: { receivedAt: 'asc' },
+      take: 200,
+    }),
+    prisma.sentMail.findMany({
+      where: {
+        status: { not: 'failed' },
+        OR: [
+          { leadId: id },
+          ...emails.map((e) => ({ toEmail: { equals: e, mode: 'insensitive' as const } })),
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+    }),
+  ])
+
+  const historyKeys = new Set(history.map((m) => `${m.subject.trim().toLowerCase()}|${m.createdAt.toISOString().slice(0, 16)}`))
+
+  type ThreadItem = {
+    id: number
+    direction: 'out' | 'in'
+    source: 'mail' | 'catalog' | 'inbound'
+    subject: string
+    body: string
+    createdAt: Date
+    inboundId: number | null
+  }
+
+  const thread: ThreadItem[] = history.map((m) => ({
+    id: Number(m.id),
+    direction: 'out',
+    source: 'mail',
+    subject: m.subject,
+    body: m.body,
+    createdAt: m.createdAt,
+    inboundId: null,
+  }))
+
+  for (const m of sent) {
+    const dup = thread.some((t) => t.subject === m.subject && Math.abs(t.createdAt.getTime() - m.createdAt.getTime()) < 120_000)
+    if (dup) continue
+    thread.push({
+      id: Number(m.id),
+      direction: 'out',
+      source: 'mail',
+      subject: m.subject,
+      body: m.body,
+      createdAt: m.createdAt,
+      inboundId: null,
+    })
+  }
+
+  for (const s of catalogs) {
+    const key = `${(s.note ? s.note.slice(0, 80) : 'catalog').trim().toLowerCase()}|${s.createdAt.toISOString().slice(0, 16)}`
+    const subject = s.note ? s.note.slice(0, 80) : `Catalog: ${s.items.map((i) => i.name).join(', ')}`
+    if (historyKeys.has(key) || thread.some((t) => t.subject === subject && Math.abs(t.createdAt.getTime() - s.createdAt.getTime()) < 120_000)) {
+      continue
+    }
+    thread.push({
+      id: Number(s.id),
+      direction: 'out',
+      source: 'catalog',
+      subject,
+      body: `<p>${s.note || 'Catalog sent'}</p><ul>${s.items.map((i) => `<li>${i.name}</li>`).join('')}</ul>`,
+      createdAt: s.createdAt,
+      inboundId: null,
+    })
+  }
+
+  for (const m of inbounds) {
+    thread.push({
+      id: Number(m.id),
+      direction: 'in',
+      source: 'inbound',
+      subject: m.subject,
+      body: m.bodyHtml || m.bodyText || '',
+      createdAt: m.receivedAt,
+      inboundId: Number(m.id),
+    })
+  }
+
+  thread.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  return c.json(bigintFix(thread))
 })
 
 // GET /api/leads/:id/history — status change audit trail

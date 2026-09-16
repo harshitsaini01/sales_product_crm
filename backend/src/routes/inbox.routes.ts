@@ -244,6 +244,11 @@ inboxRoutes.post('/:id/reply', zValidator('json', replySchema), async (c) => {
       where: { id: row.id },
       data: { status: 'sent', messageId: messageId || null },
     })
+    if (inbound.leadId) {
+      await prisma.studentMailHistory.create({
+        data: { leadId: inbound.leadId, subject, body },
+      }).catch(() => undefined)
+    }
     // Also stamp the inbound as read on reply — a mail you've replied to is
     // definitionally read, and it removes an extra click for the counsellor.
     if (!inbound.isRead) {

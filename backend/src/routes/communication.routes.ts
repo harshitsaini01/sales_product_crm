@@ -509,6 +509,11 @@ async function sendOneAndRecord(params: {
       where: { id: row.id },
       data: { status: 'sent', messageId },
     })
+    if (params.leadId) {
+      await prisma.studentMailHistory.create({
+        data: { leadId: params.leadId, subject: params.subject, body: params.storedBody },
+      }).catch(() => undefined)
+    }
     return { status: 'sent', sentMailId: row.id }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

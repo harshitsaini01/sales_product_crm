@@ -309,12 +309,10 @@ function NewPipelineModal({ onClose, onCreated }: { onClose: () => void; onCreat
   // no board — and because most people want to edit a starting point rather
   // than invent one from a blank list.
   const [stages, setStages] = useState([
-    { name: 'New', probability: 5, isWon: false, isLost: false },
-    { name: 'Qualified', probability: 25, isWon: false, isLost: false },
-    { name: 'Proposal', probability: 60, isWon: false, isLost: false },
-    { name: 'Negotiation', probability: 80, isWon: false, isLost: false },
-    { name: 'Won', probability: 100, isWon: true, isLost: false },
-    { name: 'Lost', probability: 0, isWon: false, isLost: true },
+    { name: 'Enquiry', probability: 10, isWon: false, isLost: false },
+    { name: 'Follow-up', probability: 50, isWon: false, isLost: false },
+    { name: 'Confirmed', probability: 100, isWon: true, isLost: false },
+    { name: 'Dropped', probability: 0, isWon: false, isLost: true },
   ])
 
   const create = useMutation({

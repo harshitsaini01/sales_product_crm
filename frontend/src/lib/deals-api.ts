@@ -69,7 +69,7 @@ export interface Deal {
   lastActivityAt?: string | null
   // ── Detail only
   accountDetail?: { id: number; name: string; email: string | null; phone: string | null } | null
-  lead?: CrmRef | null
+  lead?: (CrmRef & { email?: string | null; mobile?: string | null }) | null
   daysInStage?: number
   enteredStageAt?: string
   stageHistory?: { subject: string | null; at: string; by: string | null; meta: Record<string, unknown> | null }[]

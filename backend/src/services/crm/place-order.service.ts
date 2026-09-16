@@ -198,8 +198,11 @@ export async function placeOrderFromDeal(opts: {
   dealId: bigint
   actorId: bigint
 }): Promise<{ orderId: bigint; orderNumber: string; invoiceId?: bigint; invoiceNumber?: string }> {
-  const deal = await prisma.deal.findUnique({ where: { id: opts.dealId } })
+  const deal = await prisma.deal.findUnique({ where: { id: opts.dealId }, include: { stage: true } })
   if (!deal) throw new PlaceOrderError('Deal not found', 404)
+  if (!deal.stage?.isWon) {
+    throw new PlaceOrderError('Confirm this deal first, then place the order from its line items.', 400)
+  }
 
   const existing = await prisma.order.findFirst({
     where: { dealId: deal.id, status: { not: 'cancelled' } },

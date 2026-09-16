@@ -241,6 +241,9 @@ export async function sendLeadCatalog(opts: {
       subject,
       html,
     })
+    await prisma.studentMailHistory.create({
+      data: { leadId: lead.id, subject, body: html },
+    })
     return { send, channel: 'email', email: { status: 'sent' } }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
